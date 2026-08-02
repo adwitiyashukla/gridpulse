@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: mart_daily_demand
+    description: Daily demand, degree days and load factor per balancing authority.
+    columns:
+      - name: ba_code
+        tests: [not_null]
+      - name: date_local
+        tests: [not_null]
+      - name: load_factor
+        description: Mean demand divided by peak demand. Higher is more efficient.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+      - name: peak_hour_local
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 23
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ba_code, date_local]
+
+  - name: mart_load_profile
+    description: Mean hourly load shape by BA, season and day type.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ba_code, season, day_type, hour_local]
+
+  - name: mart_forecast_scorecard
+    description: Monthly accuracy and bias of the EIA's own published forecast.
+    columns:
+      - name: eia_mape_pct
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+
+  - name: mart_temperature_response
+    description: Binned empirical demand response to temperature.
+
+  - name: mart_peak_events
+    description: The 25 highest-demand days per balancing authority.
+    columns:
+      - name: pct_of_all_time_peak
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100.01

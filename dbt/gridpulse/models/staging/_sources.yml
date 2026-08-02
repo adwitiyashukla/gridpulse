@@ -1,0 +1,32 @@
+version: 2
+
+sources:
+  - name: gridpulse
+    description: >
+      Gold-layer tables materialised by the GridPulse Python pipeline
+      (`gridpulse build`). dbt models analytics marts on top of them.
+    schema: main
+    tables:
+      - name: fact_demand_hourly
+        description: One row per balancing authority per UTC hour.
+        columns:
+          - name: period_utc
+            description: Hour beginning, UTC.
+            tests: [not_null]
+          - name: ba_code
+            description: EIA balancing authority code.
+            tests: [not_null]
+          - name: demand_mwh
+            description: Observed demand in megawatthours.
+      - name: fact_forecast_accuracy
+        description: EIA's published day-ahead forecast scored against actuals.
+      - name: dim_ba
+        description: Balancing authority dimension.
+        columns:
+          - name: ba_code
+            tests: [not_null, unique]
+      - name: dim_date
+        description: Calendar dimension with US federal holidays.
+        columns:
+          - name: date_day
+            tests: [not_null, unique]

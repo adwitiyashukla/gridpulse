@@ -1,0 +1,36 @@
+# ---------------------------------------------------------------------------
+# FULL local pipeline. Install with:  pip install -r requirements-dev.txt
+# ---------------------------------------------------------------------------
+-r requirements.txt
+
+# Orchestration
+dagster==1.9.5
+dagster-webserver==1.9.5
+dagster-duckdb==0.25.5
+
+# Transformation
+dbt-core==1.9.1
+dbt-duckdb==1.9.1
+
+# NOTE: PyTorch is installed separately so pip pulls the CPU-only wheel (~200MB)
+# instead of the default CUDA build (~2.5GB). See requirements-torch.txt.
+
+# Experiment tracking
+mlflow==2.19.0
+
+# Serving
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+
+# Classical statistical baselines (Holt-Winters). Kept out of the app
+# requirements: statsmodels 0.14.4 imports scipy._lib._util._lazywhere,
+# which scipy removed in 1.17, and the app does not need it.
+statsmodels==0.14.4
+
+# Quality / testing / lint
+pytest==8.3.4
+pytest-cov==6.0.0
+ruff==0.8.6

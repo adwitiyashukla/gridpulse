@@ -1,0 +1,117 @@
+{
+  "feature_names": [
+    "hour_sin",
+    "hour_cos",
+    "dow_sin",
+    "dow_cos",
+    "doy_sin",
+    "doy_cos",
+    "is_weekend",
+    "is_holiday",
+    "is_business_day",
+    "is_day_before_holiday",
+    "is_day_after_holiday",
+    "demand_lag_24h",
+    "demand_lag_25h",
+    "demand_lag_26h",
+    "demand_lag_48h",
+    "demand_lag_72h",
+    "demand_lag_168h",
+    "demand_lag_336h",
+    "demand_roll_mean_24h",
+    "demand_roll_mean_168h",
+    "demand_roll_std_24h",
+    "demand_roll_std_168h",
+    "demand_same_hour_last_week_delta",
+    "temperature_2m",
+    "apparent_temperature",
+    "relative_humidity_2m",
+    "dew_point_2m",
+    "cloud_cover",
+    "wind_speed_10m",
+    "shortwave_radiation",
+    "heating_degrees",
+    "cooling_degrees",
+    "temp_squared",
+    "temp_lag_24h",
+    "temp_change_24h",
+    "temp_roll_mean_24h",
+    "cooling_x_business",
+    "heating_x_business",
+    "cooling_x_hour"
+  ],
+  "ba_categories": [
+    "BPAT",
+    "CISO",
+    "DUK",
+    "ERCO",
+    "FPL",
+    "ISNE",
+    "MISO",
+    "NYIS",
+    "PJM",
+    "SOCO",
+    "SWPP",
+    "TVA"
+  ],
+  "quantiles": [
+    0.1,
+    0.5,
+    0.9
+  ],
+  "best_iteration": 2995,
+  "target_scaler": {
+    "stats": {
+      "BPAT": [
+        6488.0,
+        1014.8257968865827
+      ],
+      "CISO": [
+        24231.0,
+        3883.2468495181615
+      ],
+      "DUK": [
+        11604.0,
+        2397.70200148258
+      ],
+      "ERCO": [
+        46520.5,
+        10655.114899925871
+      ],
+      "FPL": [
+        14997.0,
+        4373.054114158636
+      ],
+      "ISNE": [
+        12925.0,
+        2515.1964418087473
+      ],
+      "MISO": [
+        71875.5,
+        10140.659747961454
+      ],
+      "NYIS": [
+        16879.0,
+        2900.6671608598963
+      ],
+      "PJM": [
+        89401.0,
+        15019.273535952558
+      ],
+      "SOCO": [
+        25581.0,
+        5061.527057079318
+      ],
+      "SWPP": [
+        30646.0,
+        4884.3587842846555
+      ],
+      "TVA": [
+        17593.0,
+        3722.38695329874
+      ]
+    },
+    "global_mean": 21750.0,
+    "global_std": 18683.839881393626
+  }
+}

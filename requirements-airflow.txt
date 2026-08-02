@@ -1,0 +1,3 @@
+# Airflow is installed in its own container (see orchestration/airflow/).
+# Pinned via the official constraints file; see orchestration/airflow/README.md
+apache-airflow==2.10.4

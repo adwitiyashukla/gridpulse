@@ -1,0 +1,23 @@
+name: gridpulse
+version: "1.0.0"
+config-version: 2
+
+profile: gridpulse
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  gridpulse:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+
+vars:
+  # Balance point for heating/cooling degree calculations, degrees Celsius.
+  balance_point_c: 18

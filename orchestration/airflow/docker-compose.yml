@@ -1,0 +1,25 @@
+# Minimal single-container Airflow for demonstrating the mirrored DAG.
+# Uses LocalExecutor with SQLite, which is intentionally modest: this is a
+# portability demonstration, not the production orchestrator for this project.
+services:
+  airflow:
+    image: apache/airflow:2.10.4-python3.11
+    container_name: gridpulse-airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: airflow
+      _AIRFLOW_WWW_USER_PASSWORD: airflow
+      PYTHONPATH: /opt/gridpulse/src
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ../../src:/opt/gridpulse/src:ro
+      - ../../data:/opt/gridpulse/data
+      - ../../dbt:/opt/gridpulse/dbt
+    ports:
+      - "8080:8080"
+    command: standalone

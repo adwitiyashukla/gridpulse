@@ -1,0 +1,64 @@
+# Data lake. Bronze and silver are regenerable and stay out of git.
+data/bronze/
+data/silver/
+
+# The full development warehouse is large; the slim app artifact is committed.
+data/gold/gridpulse.duckdb
+data/gold/*.wal
+data/gold/*.tmp
+!data/gold/gridpulse_app.duckdb
+!data/gold/.gitkeep
+
+# Hugging Face sync staging directory
+.hf/
+
+# Secrets
+.env
+.env.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.python-version
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+htmlcov/
+.coverage
+
+# dbt
+dbt/gridpulse/target/
+dbt/gridpulse/dbt_packages/
+dbt/gridpulse/logs/
+logs/
+
+# Dagster
+.dagster_home/
+orchestration/dagster_app/tmp*/
+storage/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Airflow
+airflow.db
+airflow-webserver.pid
+standalone_admin_password.txt
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

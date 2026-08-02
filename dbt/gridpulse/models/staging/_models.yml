@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_demand_hourly
+    description: Cleaned hourly demand with degree-day and day-type derivations.
+    columns:
+      - name: period_utc
+        tests: [not_null]
+      - name: ba_code
+        tests:
+          - not_null
+          - relationships:
+              to: source('gridpulse', 'dim_ba')
+              field: ba_code
+      - name: demand_mwh
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+      - name: day_type
+        tests:
+          - accepted_values:
+              values: ['Weekday', 'Weekend', 'Holiday']
+
+  - name: stg_forecast_accuracy
+    description: Hourly EIA forecast error.
+    columns:
+      - name: abs_pct_error
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 500

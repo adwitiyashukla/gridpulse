@@ -1,0 +1,29 @@
+# Local stack: the API and the dashboard side by side.
+#   docker compose up
+services:
+  api:
+    build: .
+    container_name: gridpulse-api
+    environment:
+      GRIDPULSE_SERVICE: api
+      EIA_API_KEY: ${EIA_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/gold:/app/data/gold
+      - ./artifacts:/app/artifacts
+
+  app:
+    build: .
+    container_name: gridpulse-app
+    depends_on: [api]
+    environment:
+      GRIDPULSE_SERVICE: app
+      EIA_API_KEY: ${EIA_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data/gold:/app/data/gold
+      - ./artifacts:/app/artifacts

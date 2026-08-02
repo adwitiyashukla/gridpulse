@@ -1,0 +1,55 @@
+name: Sync to Hugging Face Space
+
+# Mirrors this repository to a Hugging Face Space so GitHub, the Space and the
+# local environment stay identical. The Space README (with the required YAML
+# front matter) is swapped in during the sync, keeping the GitHub README clean.
+#
+# Requires:
+#   secret   HF_TOKEN     a write token from https://huggingface.co/settings/tokens
+#   variable HF_USERNAME  your Hugging Face username
+#   variable HF_SPACE     the Space name, e.g. gridpulse
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Push to Hugging Face
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Install Hugging Face CLI
+        run: pip install "huggingface_hub[cli]>=0.27"
+
+      - name: Prepare the Space payload
+        run: |
+          rm -rf .hf && mkdir .hf
+          # Copy everything the Space needs, excluding git and local scratch.
+          rsync -a --exclude='.git' --exclude='.hf' --exclude='data/bronze' \
+                   --exclude='data/silver' --exclude='mlruns' --exclude='.venv' \
+                   ./ .hf/
+          # The Space requires YAML front matter in README.md.
+          cp deploy/README_SPACE.md .hf/README.md
+
+      - name: Push to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ vars.HF_USERNAME || 'adwitiyashukla' }}
+          HF_SPACE: ${{ vars.HF_SPACE || 'gridpulse' }}
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_USERNAME" ]; then
+            echo "::warning::HF_TOKEN or HF_USERNAME not configured; skipping sync."
+            exit 0
+          fi
+          huggingface-cli upload \
+            "${HF_USERNAME}/${HF_SPACE:-gridpulse}" \
+            .hf . \
+            --repo-type=space \
+            --token="$HF_TOKEN" \
+            --commit-message="Sync from GitHub ${GITHUB_SHA::7}"

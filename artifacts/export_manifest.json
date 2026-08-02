@@ -1,0 +1,17 @@
+{
+  "database": "gridpulse_app.duckdb",
+  "size_mb": 13.38,
+  "window_days": 400,
+  "tables": {
+    "dim_ba": 12,
+    "dim_date": 2792,
+    "fact_demand_hourly": 115057,
+    "fact_forecast_accuracy": 114457,
+    "model_predictions": 25927,
+    "anomaly_scores": 115205,
+    "model_scores": 11,
+    "dq_results": 16,
+    "dq_scorecard": 6
+  },
+  "exported_at_utc": "2026-08-02T06:59:43.273953+00:00"
+}

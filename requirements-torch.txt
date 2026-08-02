@@ -1,0 +1,6 @@
+# CPU-only PyTorch. Install with the dedicated index so pip does not pull the
+# multi-gigabyte CUDA build, which is useless without an NVIDIA GPU:
+#
+#   pip install -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu
+#
+torch==2.5.1

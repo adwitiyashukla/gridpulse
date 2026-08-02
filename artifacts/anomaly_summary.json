@@ -1,0 +1,19 @@
+{
+  "hours_scored": 796384,
+  "anomalies_found": 20986,
+  "anomaly_rate_pct": 2.635,
+  "by_type": {
+    "multivariate_outlier": 7895,
+    "unusual_daily_shape": 7566,
+    "frozen_telemetry": 2712,
+    "demand_spike": 2657,
+    "extreme_ramp": 128,
+    "demand_drop": 28
+  },
+  "by_severity": {
+    "none": 775398,
+    "low": 20523,
+    "medium": 416,
+    "high": 47
+  }
+}
