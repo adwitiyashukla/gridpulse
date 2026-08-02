@@ -18,7 +18,7 @@ import argparse
 import logging
 import sys
 import time
-from typing import Callable
+from collections.abc import Callable
 
 
 def _configure_logging(verbose: bool) -> None:

@@ -109,7 +109,7 @@ head = headline()
 skill = head.get("skill_vs_eia_pct")
 
 st.markdown(
-    f"""
+    """
     <div class="gp-hero">
       <h1>⚡ GridPulse</h1>
       <p>Day-ahead electricity demand forecasting for US balancing authorities,
@@ -183,7 +183,7 @@ if not summary.empty:
     c3.metric("Peak demand observed", f"{int(row['peak']):,} MW")
 c4.metric(
     "Accuracy vs EIA forecast",
-    f"{skill:+.1f}%" if isinstance(skill, (int, float)) else "-",
+    f"{skill:+.1f}%" if isinstance(skill, int | float) else "-",
     help="Percentage improvement in MAPE over the EIA's own published day-ahead forecast.",
 )
 

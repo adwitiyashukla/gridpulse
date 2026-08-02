@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from gridpulse.quality.checks import CHECKS, Dimension, Severity
 
 
