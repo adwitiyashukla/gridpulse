@@ -69,9 +69,9 @@ authorities, using a strictly chronological split.
 Numbers above are real and reproducible. These caveats belong with them.
 
 **The two claims are different claims.** `gbm` uses only weather, calendar and the
-demand history, and beats the EIA benchmark by 0.5% - a genuine win, but a narrow
+demand history, and beats the EIA benchmark by 0.6% - a genuine win, but a narrow
 one. `gbm_hybrid` additionally consumes EIA's published forecast as an input and
-beats it by 24.8%. That is not leakage (EIA publishes day-ahead, so the value
+beats it by 25.0%. That is not leakage (EIA publishes day-ahead, so the value
 genuinely exists at prediction time) but it is a *different* problem: correcting a
 published forecast rather than producing one from first principles. Both are
 reported because conflating them would be dishonest.
@@ -86,13 +86,14 @@ actuals against a nominal 80%. The intervals are too narrow. The fix is conforma
 calibration - computing the empirical residual quantile on a holdout and rescaling
 the band - which is the next thing on the roadmap.
 
-**EIA still wins at peak hours.** Their peak-hour MAPE is 2.70% against our 3.48%.
+**EIA still wins at peak hours.** Their peak-hour MAPE is 2.70% against our 3.47%.
 Peak accuracy drives capacity procurement and is where forecast error is most
 expensive, so this is the gap that matters most operationally.
 
-**The deep models lose.** The LSTM (5.95%) and Transformer (5.78%) are beaten by
-both gradient-boosted models and, in the LSTM's case, barely beat a seasonal naive
-baseline. At twelve series and seven years of history this is the expected result:
+**The deep models lose.** The LSTM (5.94%) and Transformer
+(8.05%) are beaten by both gradient-boosted models, and
+neither beats a seasonal naive baseline (5.68%). At twelve
+series and seven years of history this is the expected result:
 sequence models start to win with many more series or richer exogenous inputs. They
 are included because the architectural comparison is real and shipping only the
 winner would hide it.
@@ -127,7 +128,7 @@ flowchart TD
 
     subgraph PROCESS["③ Process"]
         C1["dbt marts<br/><i>5 models, 20+ tests</i>"]
-        C2["Data quality<br/><i>13 checks, 6 dimensions</i>"]
+        C2["Data quality<br/><i>16 checks, 6 dimensions</i>"]
         C3["Feature store<br/><i>40 engineered features</i>"]
         C4["Anomaly detection<br/><i>3-detector consensus</i>"]
     end
@@ -164,7 +165,7 @@ flowchart TD
 
 Incremental watermarked extracts land as immutable Parquet, conform into a silver
 layer that fixes timezone and gap semantics without destroying evidence, materialise
-into a Kimball star schema in DuckDB, get validated by thirteen domain-specific
+into a Kimball star schema in DuckDB, get validated by sixteen domain-specific
 quality checks, feed forty engineered features into four model families, and serve
 through a REST API and a public web app.
 
@@ -244,7 +245,7 @@ streamlit run app.py               # open http://localhost:8501
 gridpulse probe       # validate API keys and response contracts
 gridpulse ingest      # extract EIA + weather into bronze (incremental)
 gridpulse build       # bronze -> silver -> gold star schema
-gridpulse quality     # 13 data quality checks
+gridpulse quality     # 16 data quality checks
 gridpulse train       # train and score every model
 gridpulse anomalies   # three-detector anomaly consensus
 gridpulse export      # write the slim artifact for the public app
@@ -275,7 +276,7 @@ gridpulse/
 │   │   ├── eia.py               EIA-930 hourly telemetry
 │   │   └── weather.py           ERA5 archive + forecast, stitched
 │   ├── warehouse/             DuckDB medallion build and app export
-│   ├── quality/               13 declarative checks across 6 dimensions
+│   ├── quality/               16 declarative checks across 6 dimensions
 │   ├── features/              40 engineered features, leakage-audited
 │   ├── models/
 │   │   ├── metrics.py           MAPE, sMAPE, pinball, coverage, skill
@@ -386,7 +387,7 @@ else works without configuration.
 | Experiment tracking | MLflow |
 | Serving | FastAPI, Streamlit, Docker |
 | GenAI | Groq (Llama 3.3) with a guarded text-to-SQL layer |
-| Quality | 13 declarative checks, 20+ dbt tests, pytest |
+| Quality | 16 declarative checks, 20+ dbt tests, pytest |
 
 ---
 
