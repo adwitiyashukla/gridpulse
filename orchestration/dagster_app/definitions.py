@@ -13,7 +13,12 @@ An equivalent Airflow DAG lives in ``orchestration/airflow/dags/`` for teams
 standardised on Airflow.
 """
 
-from __future__ import annotations
+# NOTE: `from __future__ import annotations` is deliberately NOT used here.
+# PEP 563 turns every annotation into a string at runtime, and Dagster inspects
+# the `context` parameter's annotation to decide what to inject. With postponed
+# evaluation it sees the string "AssetExecutionContext" rather than the class and
+# raises DagsterInvalidDefinitionError, with a message that confusingly names the
+# very type you supplied.
 
 import sys
 from pathlib import Path
@@ -289,12 +294,15 @@ daily_schedule = ScheduleDefinition(
     description="Nightly full refresh after EIA publishes the previous day.",
 )
 
+# Left at Dagster's default status (stopped), so it appears in the UI and can be
+# enabled deliberately rather than starting to poll the moment anyone runs the
+# project. Passing default_status=None is not the way to express that: the
+# parameter expects a DefaultScheduleStatus enum and rejects None outright.
 hourly_schedule = ScheduleDefinition(
     job=incremental_refresh,
     cron_schedule="15 * * * *",
     execution_timezone="UTC",
-    description="Hourly top-up of grid and weather data.",
-    default_status=None,
+    description="Hourly top-up of grid and weather data. Enable in the UI to activate.",
 )
 
 defs = Definitions(
