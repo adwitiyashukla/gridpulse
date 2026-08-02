@@ -10,8 +10,8 @@ benchmarked against the EIA's own published forecast.**
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**[▶ Try the live app](https://huggingface.co/spaces/adwitiyashukla/gridpulse)** ·
-[API docs](#rest-api) · [Architecture](#architecture) · [Results](#results)
+[Results](#results) · [Architecture](#architecture) · [Quickstart](#quickstart) ·
+[REST API](#rest-api) · [Engineering log](docs/ENGINEERING_LOG.md)
 
 </div>
 
@@ -293,7 +293,7 @@ gridpulse/
 │   └── airflow/               Mirrored DAG + docker-compose
 ├── app.py                     The public Streamlit website
 ├── tests/                     Unit + integration, no network required
-└── .github/workflows/         CI, scheduled refresh, Hugging Face sync
+└── .github/workflows/         CI and scheduled data refresh
 ```
 
 ---
@@ -358,15 +358,18 @@ referential integrity.
 
 | Target | How |
 |---|---|
-| **Hugging Face Spaces** | `.github/workflows/sync-huggingface.yml` mirrors on every push to `main` |
-| **Streamlit Cloud** | Point it at this repo; the root `requirements.txt` is kept deliberately light |
-| **Docker** | `docker compose up` runs the API and dashboard together |
-| **Engineering log** | [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md) - every bug, cause and fix |
+| **Local** | `streamlit run app.py` after `gridpulse all` |
+| **Streamlit Community Cloud** | Point it at this repo and `app.py`. The root `requirements.txt` is deliberately light (11 packages, no Dagster/dbt/Airflow/PyTorch) so the app stays inside the free tier |
+| **Docker** | `docker compose up` runs the API and the dashboard together |
 | **Scheduled refresh** | `.github/workflows/refresh.yml` re-ingests, retrains and commits weekly |
 
-Set `EIA_API_KEY` as a repository secret, plus `HF_TOKEN` and the `HF_USERNAME` /
-`HF_SPACE` variables for the Space mirror. `GROQ_API_KEY` goes in the Space's
-**Settings → Variables and secrets**.
+The app ships with everything it needs committed: a 13 MB slim DuckDB artifact and
+the trained model files. It starts instantly with no warehouse dependency and no
+retraining, and calls the live EIA and Open-Meteo APIs for anything newer.
+
+Set `EIA_API_KEY` as a repository secret to enable the scheduled refresh, and
+`GROQ_API_KEY` in your deployment environment to enable the AI agent. Everything
+else works without configuration.
 
 ---
 

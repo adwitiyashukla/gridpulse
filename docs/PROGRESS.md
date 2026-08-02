@@ -49,6 +49,5 @@ gridpulse all
 streamlit run app.py
 ```
 
-Deployment steps for GitHub and Hugging Face are in
-**[DEPLOYMENT.md](DEPLOYMENT.md)**.
+Deployment steps are in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 Interview preparation notes are in **[INTERVIEW_NOTES.md](INTERVIEW_NOTES.md)**.

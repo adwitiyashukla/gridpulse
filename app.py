@@ -1,9 +1,9 @@
 """GridPulse public web application.
 
-Deployed to Hugging Face Spaces and Streamlit Community Cloud from the same file.
-The app reads the slim DuckDB artifact committed alongside it and the pre-trained
-model files, so it starts instantly and never trains on the request path. Live
-weather is fetched on demand to produce genuinely forward-looking forecasts.
+Runs locally or on Streamlit Community Cloud from the same file. The app reads the
+slim DuckDB artifact committed alongside it and the pre-trained model files, so it
+starts instantly and never trains on the request path. Live weather is fetched on
+demand to produce genuinely forward-looking forecasts.
 """
 
 from __future__ import annotations
@@ -619,8 +619,8 @@ with tabs[5]:
 
     if not agent.available:
         st.warning(
-            "The AI agent needs a Groq API key. Locally, put `GROQ_API_KEY` in `.env`. "
-            "On Hugging Face Spaces, add it under **Settings → Variables and secrets**. "
+            "The AI agent needs a Groq API key. Locally, put `GROQ_API_KEY` in `.env`; "
+            "when deployed, add it to your host's secrets. "
             "Free keys: https://console.groq.com/keys"
         )
     else:

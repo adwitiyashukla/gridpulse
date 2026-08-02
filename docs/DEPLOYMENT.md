@@ -1,11 +1,8 @@
 # Deployment guide
 
-Three environments, one source of truth. Local is where the pipeline runs, GitHub
-is the canonical repository, and Hugging Face Spaces hosts the public site.
-
 ```
-   local laptop  ──push──►  GitHub  ──GitHub Action──►  Hugging Face Space
-   (full pipeline)          (source of truth)           (public website)
+   local laptop  ──push──►  GitHub  ──Streamlit Cloud──►  public URL
+   (full pipeline)          (source of truth)             (optional)
 ```
 
 ---
@@ -17,90 +14,115 @@ cd C:\Users\HP\Desktop\ElectricityForecaster
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
+pip install -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu
 pip install -e . --no-deps
 
-copy .env.example .env      # then add EIA_API_KEY and GROQ_API_KEY
+copy .env.example .env      # add EIA_API_KEY, optionally GROQ_API_KEY
 
-gridpulse probe             # validate credentials, ~2 seconds
+gridpulse probe             # validate credentials, about 2 seconds
 gridpulse all               # full pipeline
 streamlit run app.py        # http://localhost:8501
 ```
 
-`gridpulse all` produces the two things the public site needs:
+`gridpulse all` produces the two things the app needs:
 
 | Artifact | Purpose |
 |---|---|
-| `data/gold/gridpulse_app.duckdb` | Slim warehouse slice the app reads |
+| `data/gold/gridpulse_app.duckdb` | Slim warehouse slice, about 13 MB |
 | `artifacts/` | Trained models, leaderboard, headline metric |
 
 Both are committed on purpose. Everything else under `data/` is regenerable and
-excluded by `.gitignore`.
+excluded by `.gitignore`, including the 129 MB development warehouse.
+
+### Individual stages
+
+```powershell
+gridpulse probe       # validate API keys and response contracts
+gridpulse ingest      # extract EIA + weather into bronze (incremental)
+gridpulse build       # bronze -> silver -> gold star schema
+gridpulse quality     # 16 data quality checks
+gridpulse train       # train and score every model
+gridpulse anomalies   # three-detector anomaly consensus
+gridpulse export      # write the slim artifact for the app
+```
+
+### Services
+
+```powershell
+dagster dev -f orchestration/dagster_app/definitions.py   # asset lineage, :3000
+uvicorn gridpulse.api.main:app --reload --port 8000       # REST API + OpenAPI docs
+streamlit run app.py                                      # dashboard, :8501
+cd dbt/gridpulse; dbt build --profiles-dir .              # analytics marts
+pytest -q                                                 # full test suite
+```
 
 ---
 
 ## 2. GitHub
 
-Create an **empty public repository** named `gridpulse` at
-<https://github.com/new> - no README, no .gitignore, no licence.
+Live at <https://github.com/adwitiyashukla/gridpulse>.
+
+To push further changes:
 
 ```powershell
-cd C:\Users\HP\Desktop\ElectricityForecaster
-
-git init
-git add .
-git commit -m "GridPulse: day-ahead grid demand forecasting platform"
-git branch -M main
-git remote add origin https://github.com/adwitiyashukla/gridpulse.git
-git push -u origin main
+git add -A
+git commit -m "your message"
+git push
 ```
 
-### Repository secrets and variables
+### Repository secrets
 
 **Settings → Secrets and variables → Actions**
 
-| Type | Name | Value |
+| Type | Name | Purpose |
 |---|---|---|
-| Secret | `EIA_API_KEY` | Your EIA key - powers the scheduled refresh |
-| Secret | `HF_TOKEN` | A **write** token from <https://huggingface.co/settings/tokens> |
-| Variable | `HF_USERNAME` | `adwitiyashukla` |
-| Variable | `HF_SPACE` | `gridpulse` |
+| Secret | `EIA_API_KEY` | Powers the weekly scheduled refresh workflow |
 
-Once set, the CI badge goes green on the first push and the weekly refresh keeps
-the deployed site current without any manual work.
+Without it CI still passes, because the test suite needs no network and no
+credentials. Only the scheduled refresh is skipped.
+
+### Workflows
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `ci.yml` | Every push and pull request | Ruff lint, pytest on Python 3.10/3.11/3.12, dbt parse, Dagster asset graph load |
+| `refresh.yml` | Weekly cron, or manual | Re-ingests EIA and weather, rebuilds, validates, retrains, commits updated artifacts |
 
 ---
 
-## 3. Hugging Face Space
+## 3. Public website (optional)
 
-Create the Space at <https://huggingface.co/new-space>:
+**Streamlit Community Cloud** is the right host for this app: free, purpose-built
+for Streamlit, and it deploys straight from GitHub.
 
-| Field | Value |
-|---|---|
-| Owner | `adwitiyashukla` |
-| Space name | `gridpulse` |
-| Licence | MIT |
-| SDK | **Streamlit** |
-| Hardware | CPU basic (free) |
-| Visibility | Public |
+> Hugging Face Spaces is not an option. Hugging Face removed the Streamlit SDK
+> entirely; its API now accepts only `gradio`, `docker` or `static`. Gradio on the
+> free tier is locked to ZeroGPU, which is Gradio-only, and Docker requires a PRO
+> subscription. There is no free path to a Streamlit Space.
 
-Then add the agent key under **Settings → Variables and secrets**:
+### Steps
 
-| Name | Value |
-|---|---|
-| `GROQ_API_KEY` | Your Groq key |
+1. Sign in at <https://share.streamlit.io> with GitHub and authorise access.
+2. Click **Create app**, then **Deploy a public app from GitHub**.
+3. Fill in:
+   - **Repository:** `adwitiyashukla/gridpulse`
+   - **Branch:** `main`
+   - **Main file path:** `app.py`
+4. Under **Advanced settings → Secrets**, paste this to enable the AI agent
+   (optional; everything else works without it):
+   ```toml
+   GROQ_API_KEY = "your_groq_key"
+   ```
+5. Click **Deploy**. The first build takes 3 to 5 minutes.
 
-The `sync-huggingface.yml` workflow pushes to the Space on every push to `main`,
-swapping in `deploy/README_SPACE.md` (which carries the YAML front matter the
-Space requires) so the GitHub README stays clean.
+You get a URL like `https://gridpulse.streamlit.app`. Add it to the repository's
+**About** panel so it appears at the top right of the GitHub page.
 
-### Manual push, if you prefer
+### Why it fits the free tier
 
-```powershell
-pip install "huggingface_hub[cli]"
-huggingface-cli login
-copy deploy\README_SPACE.md README_HF.md
-huggingface-cli upload adwitiyashukla/gridpulse . . --repo-type=space
-```
+The root `requirements.txt` holds 11 packages and deliberately excludes Dagster,
+dbt, Airflow, PyTorch and MLflow, none of which the app needs. Inference runs on
+the committed LightGBM artifact, which loads in milliseconds.
 
 ---
 
@@ -116,18 +138,20 @@ docker compose up --build
 
 ## Troubleshooting
 
-**Space build fails on dependencies.** The root `requirements.txt` is deliberately
-light - it excludes Dagster, dbt, Airflow and PyTorch, which the public app does
-not need. Do not merge `requirements-dev.txt` into it.
-
 **App shows "No warehouse found".** `data/gold/gridpulse_app.duckdb` was not
-committed. Run `gridpulse export`, then `git add -f data/gold/gridpulse_app.duckdb`.
+committed. Run `gridpulse export`, then
+`git add -f data/gold/gridpulse_app.duckdb`.
 
-**App shows "Model artifacts are missing".** Run `gridpulse train`, then commit the
-`artifacts/` directory.
+**App shows "Model artifacts are missing".** Run `gridpulse train`, then commit
+the `artifacts/` directory.
 
 **Export exceeds GitHub's 100 MB file limit.** Shrink the window:
 `python -c "from gridpulse.warehouse.export import export_for_app; export_for_app(window_days=180)"`
 
 **"Ask the Grid" is disabled.** `GROQ_API_KEY` is missing. Locally it belongs in
-`.env`; on the Space it belongs in Settings → Variables and secrets.
+`.env`; when deployed it belongs in the host's secrets.
+
+**Streamlit shows stale data after a rebuild.** Streamlit caches queries for 15
+minutes. Press **C** in the browser to clear the cache, then **R** to rerun. If
+you changed a Python module rather than `app.py`, restart the server entirely:
+hot reload does not re-import modules that are already loaded.
