@@ -8,7 +8,7 @@ sdk_version: 1.41.1
 app_file: app.py
 pinned: true
 license: mit
-short_description: Day-ahead grid demand forecasting benchmarked against the EIA
+short_description: Day-ahead grid demand forecasting benchmarked vs the EIA
 ---
 
 # ⚡ GridPulse
