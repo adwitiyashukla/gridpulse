@@ -1,0 +1,27 @@
+# Line-ending policy.
+#
+# Git on Windows rewrites LF to CRLF on checkout, which makes committed files
+# appear modified when nothing about them has changed. Worse, a shell script
+# committed with CRLF fails inside a Linux container with "bad interpreter",
+# because the carriage return becomes part of the interpreter path.
+#
+# Everything below is therefore pinned to LF regardless of platform.
+
+* text=auto eol=lf
+
+# Shell scripts are executed by Linux. CRLF here is a hard failure, not cosmetic.
+*.sh              text eol=lf
+Dockerfile        text eol=lf
+*.dockerfile      text eol=lf
+
+# Model artifacts are machine-written and compared byte for byte.
+artifacts/**      text eol=lf
+
+# Binary formats. Never touch these, and never try to diff them as text.
+*.duckdb          binary
+*.parquet         binary
+*.pt              binary
+*.pkl             binary
+*.png             binary
+*.jpg             binary
+*.ico             binary

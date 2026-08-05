@@ -5,15 +5,35 @@
 **Day-ahead electricity demand forecasting for the US power grid -
 benchmarked against the EIA's own published forecast.**
 
+### [→ Try the live app](https://gridpulse-ai.streamlit.app)
+
+[![Live app](https://img.shields.io/badge/live%20app-gridpulse--ai.streamlit.app-FF4B4B?logo=streamlit&logoColor=white)](https://gridpulse-ai.streamlit.app)
 [![CI](https://github.com/adwitiyashukla/gridpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/adwitiyashukla/gridpulse/actions/workflows/ci.yml)
 [![Refresh](https://github.com/adwitiyashukla/gridpulse/actions/workflows/refresh.yml/badge.svg)](https://github.com/adwitiyashukla/gridpulse/actions/workflows/refresh.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[Results](#results) · [Architecture](#architecture) · [Quickstart](#quickstart) ·
+[Live app](https://gridpulse-ai.streamlit.app) · [Results](#results) ·
+[Architecture](#architecture) · [Quickstart](#quickstart) ·
 [REST API](#rest-api) · [Engineering log](docs/ENGINEERING_LOG.md)
 
 </div>
+
+---
+
+## Live app
+
+**<https://gridpulse-ai.streamlit.app>** - no install, no signup.
+
+| Tab | What it does |
+|---|---|
+| **Forecast** | Generates a live 24-hour forecast with P10-P90 intervals, calling Open-Meteo in real time and running the trained LightGBM model in the browser session |
+| **Explorer** | Historical demand, the V-shaped temperature response, weekday vs weekend load shapes |
+| **Model Leaderboard** | Every model scored against the EIA's published forecast on identical out-of-sample hours |
+| **Anomalies** | Suspect hours flagged by three independent detectors voting in consensus |
+| **Data Quality** | Scorecard across six classical data quality dimensions, 16 checks |
+| **Ask the Grid** | Plain English question, guarded SQL, chart back. The generated SQL is always shown |
+| **How it works** | The architecture, in the app itself |
 
 ---
 

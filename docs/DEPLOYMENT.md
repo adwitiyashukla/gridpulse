@@ -90,10 +90,13 @@ credentials. Only the scheduled refresh is skipped.
 
 ---
 
-## 3. Public website (optional)
+## 3. Public website
+
+**Live at <https://gridpulse-ai.streamlit.app>.**
 
 **Streamlit Community Cloud** is the right host for this app: free, purpose-built
-for Streamlit, and it deploys straight from GitHub.
+for Streamlit, and it deploys straight from GitHub. Every push to `main`
+redeploys automatically.
 
 > Hugging Face Spaces is not an option. Hugging Face removed the Streamlit SDK
 > entirely; its API now accepts only `gradio`, `docker` or `static`. Gradio on the
@@ -108,15 +111,19 @@ for Streamlit, and it deploys straight from GitHub.
    - **Repository:** `adwitiyashukla/gridpulse`
    - **Branch:** `main`
    - **Main file path:** `app.py`
-4. Under **Advanced settings → Secrets**, paste this to enable the AI agent
-   (optional; everything else works without it):
-   ```toml
-   GROQ_API_KEY = "your_groq_key"
-   ```
+4. Open **Advanced settings**:
+   - **Python version:** set it to **3.11**. The default offered is newer than
+     `pyproject.toml` allows (`>=3.10,<3.13`), and several pinned wheels do not
+     yet build against it.
+   - **Secrets:** paste this to enable the AI agent (optional; the other six tabs
+     work without it):
+     ```toml
+     GROQ_API_KEY = "your_groq_key"
+     ```
 5. Click **Deploy**. The first build takes 3 to 5 minutes.
 
-You get a URL like `https://gridpulse.streamlit.app`. Add it to the repository's
-**About** panel so it appears at the top right of the GitHub page.
+Add the resulting URL to the repository's **About** panel so it appears at the
+top right of the GitHub page.
 
 ### Why it fits the free tier
 
