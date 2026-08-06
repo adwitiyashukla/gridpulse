@@ -1,9 +1,12 @@
 # Deployment guide
 
 ```
-   local laptop  ──push──►  GitHub  ──Streamlit Cloud──►  public URL
-   (full pipeline)          (source of truth)             (optional)
+                                       ┌── Streamlit Cloud ──► gridpulse-ai.streamlit.app
+   local laptop  ──push──►  GitHub  ───┤
+   (full pipeline)     (source of truth)└── GitHub Actions ───► HF Docker Space
 ```
+
+One commit, two public deployments, both updated automatically on push.
 
 ---
 
@@ -90,18 +93,18 @@ credentials. Only the scheduled refresh is skipped.
 
 ---
 
-## 3. Public website
+## 3. Streamlit Community Cloud
 
 **Live at <https://gridpulse-ai.streamlit.app>.**
 
-**Streamlit Community Cloud** is the right host for this app: free, purpose-built
-for Streamlit, and it deploys straight from GitHub. Every push to `main`
-redeploys automatically.
+Free, purpose-built for Streamlit, and it deploys straight from GitHub. Every
+push to `main` redeploys automatically.
 
-> Hugging Face Spaces is not an option. Hugging Face removed the Streamlit SDK
-> entirely; its API now accepts only `gradio`, `docker` or `static`. Gradio on the
-> free tier is locked to ZeroGPU, which is Gradio-only, and Docker requires a PRO
-> subscription. There is no free path to a Streamlit Space.
+> Hugging Face removed the Streamlit SDK; its Space API now accepts only
+> `gradio`, `docker` or `static`. The Space below therefore runs the repository
+> `Dockerfile` rather than a Streamlit SDK Space. Creating Docker Spaces on a
+> personal account requires a PRO subscription; the CPU basic hardware the Space
+> runs on is free.
 
 ### Steps
 
@@ -133,7 +136,55 @@ the committed LightGBM artifact, which loads in milliseconds.
 
 ---
 
-## 4. Docker (optional)
+## 4. Hugging Face Docker Space
+
+**Live at <https://huggingface.co/spaces/adwitiyashukla/gridpulse>.**
+
+The Space runs the repository `Dockerfile`, so the container serving the public
+Space is the same one `docker compose up` builds locally. Nothing is host
+specific.
+
+### How the sync works
+
+`.github/workflows/sync-huggingface.yml` runs on every push to `main`:
+
+1. Checks out the repository.
+2. Copies it to `.hf/`, excluding `data/bronze`, `data/silver` and `mlruns`.
+3. Swaps in `deploy/README_SPACE.md` as `README.md`, because a Space requires
+   YAML front matter (`sdk: docker`, `app_port: 7860`) that has no business
+   sitting at the top of the GitHub README.
+4. Uploads via `HfApi.upload_folder`, which handles Git LFS for the committed
+   13 MB DuckDB artifact. The `huggingface-cli` binary was retired, so the
+   Python API is the stable interface.
+
+The workflow exits cleanly rather than failing when `HF_TOKEN` is absent, so a
+fork without the secret does not get a red Actions tab.
+
+### One-time setup
+
+| Where | What |
+|---|---|
+| <https://huggingface.co/settings/tokens> | A token with **write** permission |
+| GitHub → Settings → Secrets → Actions | Secret `HF_TOKEN` holding that token |
+| Space → Settings → Variables and secrets | Secret `GROQ_API_KEY`, raw value, no TOML |
+| <https://huggingface.co/new-space> | SDK **Docker → Blank**, hardware **CPU basic**, public |
+
+Optional repository variables `HF_USERNAME` and `HF_SPACE` override the defaults
+if the Space is renamed.
+
+### Port 7860
+
+Spaces expect the container to listen on 7860 and to run as UID 1000 with a
+writable `$HOME`, because Streamlit writes config and cache under
+`$HOME/.streamlit`. The `Dockerfile` defaults to both, so the Space needs no
+overrides. `entrypoint.sh` also disables CORS and XSRF protection: Spaces serve
+the app in a cross-origin iframe, which Streamlit's default XSRF check rejects.
+The app is read-only and takes no authenticated input, so there is no state for
+a cross-site request to tamper with.
+
+---
+
+## 5. Docker (optional)
 
 ```bash
 docker compose up --build
