@@ -212,6 +212,83 @@ was drawn independently of the sort.
 
 ---
 
+## 12. A fix for one problem that silently created another
+
+**Symptom.** The Hugging Face Space built successfully, the container started,
+Streamlit served the page, and then the app rendered:
+
+```
+IO Error: The file "/app/data/gold/gridpulse_app.duckdb" exists,
+but it is not a valid DuckDB database file!
+```
+
+Every layer reported success. The failure only appeared to a user opening the
+page.
+
+**Background.** Earlier the same day, `git status` was showing 910 changed lines
+across `artifacts/` on a repository nobody had touched. The diff was pure CRLF:
+Git on Windows had rewritten every line ending on checkout. The fix was a
+`.gitattributes` pinning the repository to LF, which also protects
+`deploy/entrypoint.sh`, since a shell script with CRLF fails inside a Linux
+container with `bad interpreter`.
+
+That fix was correct. It also broke the Space.
+
+**Cause.** Every Hugging Face Space ships with a default `.gitattributes` whose
+job is to declare `filter=lfs` for large-file patterns. The sync workflow
+uploads the whole repository, so the new `.gitattributes` overwrote it.
+
+Hugging Face stores any file above roughly 10 MB in LFS automatically, which on
+this repository means:
+
+| File | Size |
+|---|---|
+| `artifacts/gbm_hybrid/point.txt` | 35.8 MB |
+| `artifacts/gbm/point.txt` | 35.6 MB |
+| `data/gold/gridpulse_app.duckdb` | 13.4 MB |
+| `artifacts/deep_*/weights.pt` | ~0.5 MB |
+
+A file is only reconstructed from LFS on checkout **if `.gitattributes` declares
+a filter for it**. With those declarations gone, the Space's Docker build
+checked out 133-byte pointer files, and `COPY data/gold ./data/gold` faithfully
+copied a pointer into the image.
+
+The same files on GitHub are ordinary blobs, committed without LFS and comfortably
+inside the 100 MB per-file limit. So the identical repository was correct on one
+host and broken on the other, which is why the Streamlit deployment kept working
+throughout and gave no hint anything was wrong.
+
+**Fix.** `deploy/gitattributes_space.txt`, swapped in during the sync exactly as
+`deploy/README_SPACE.md` already replaced the README. The two `.gitattributes`
+files cannot be merged, because the LFS declarations are true on the Space and
+false on GitHub; adding them to the repository would push 85 MB into GitHub LFS
+to solve a problem GitHub does not have.
+
+Order matters inside that file. The broad `* text=auto eol=lf` rule has to come
+**first**, because the last matching pattern wins per attribute. Placed last it
+would have reset `text=auto` on every binary declared above it, undoing the
+`-text` that stops Git rewriting bytes inside a DuckDB file. That was caught by
+reading the file back before committing, not by testing.
+
+The workflow also gained a step that fails the build if any of the three large
+files is still a pointer, checked by size and by grepping for the pointer's
+`git-lfs.github.com/spec` header.
+
+**The real lesson.** Fixing the line-ending bug required overwriting a file
+whose purpose was invisible from inside this repository. The default
+`.gitattributes` was never read, never diffed, and never mentioned in any commit.
+Deleting it produced no error at commit time, no error during upload, no error
+during the Docker build, and no error at container start. Every gate a CI
+pipeline normally provides was passed by an image that could not work.
+
+The narrower point: **a deployment target's conventions are part of its
+interface, even when they arrive as files you did not write.** The broader one:
+when a fix works by replacing something wholesale rather than editing it, the
+question worth asking is not whether the new version is correct, but what the
+old version was doing that nobody wrote down.
+
+---
+
 ## Themes
 
 **Robust statistics are not optional on real data.** Mean and standard deviation
@@ -229,3 +306,10 @@ one where a fix was guessed at instead.
 **Boundaries are where data is worst and logic is weakest.** The final rows of a
 series carry preliminary data, and neighbour-based logic cannot classify them at
 all. Both problems met in the same place.
+
+**A green pipeline is evidence about the pipeline, not about the artifact.** The
+LFS bug passed lint, tests, the sync, the Docker build and the container health
+check, and still shipped an image containing a 133-byte text file where a 13 MB
+database belonged. Checks only assert what somebody thought to assert. The
+verification step now guarding that file exists because the failure got all the
+way to a rendered page first.
