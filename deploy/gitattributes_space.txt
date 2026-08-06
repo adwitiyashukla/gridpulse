@@ -1,0 +1,50 @@
+# .gitattributes for the Hugging Face Space ONLY.
+#
+# The sync workflow copies this over the repository's own .gitattributes, the
+# same way it swaps README_SPACE.md in for README.md. The two files cannot be
+# merged, because the LFS rules below are true on the Space and false on GitHub.
+#
+# Why they differ
+# ---------------
+# Hugging Face stores any file above roughly 10 MB in LFS automatically, plus
+# some extensions such as .pt regardless of size. GitHub stores those same files
+# as ordinary blobs, because they were committed without LFS and fit inside the
+# 100 MB per-file limit.
+#
+# A file is only reconstructed from LFS on checkout if .gitattributes declares
+# a filter for it. Without these lines, the Space's Docker build checks out a
+# 133-byte pointer instead of the real file, and `COPY data/gold` copies that
+# pointer into the image. The container then fails with
+#
+#   IO Error: The file "/app/data/gold/gridpulse_app.duckdb" exists,
+#   but it is not a valid DuckDB database file!
+#
+# Putting these lines in the GitHub .gitattributes instead would be wrong twice
+# over: those files are not in GitHub LFS, and declaring them would push them
+# into it on the next commit, spending LFS quota to solve a problem GitHub does
+# not have.
+#
+# ORDER MATTERS. Within this file the LAST matching pattern wins for a given
+# attribute, so the broad line-ending rule has to come first. Putting it last
+# would set text=auto back on every binary declared below it, undoing the -text
+# that keeps git from rewriting bytes inside a DuckDB file.
+
+# 1. Line-ending policy, carried over from the repository .gitattributes.
+#    entrypoint.sh is the container entrypoint: CRLF here means "bad
+#    interpreter" and a Space that never starts.
+* text=auto eol=lf
+*.sh                  text eol=lf
+Dockerfile            text eol=lf
+
+# 2. Large binaries, reconstructed from LFS on checkout. These come last so
+#    their -text survives.
+*.duckdb              filter=lfs diff=lfs merge=lfs -text
+*.parquet             filter=lfs diff=lfs merge=lfs -text
+*.pt                  filter=lfs diff=lfs merge=lfs -text
+*.pkl                 filter=lfs diff=lfs merge=lfs -text
+
+# 3. LightGBM writes models as text. point.txt is about 35 MB and is stored in
+#    LFS; the quantile models sit just under the threshold and are not. The
+#    smudge filter passes non-pointer content through untouched, so one pattern
+#    covers both cases and keeps working if a retrain pushes them over.
+artifacts/**/*.txt    filter=lfs diff=lfs merge=lfs -text

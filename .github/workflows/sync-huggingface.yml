@@ -43,6 +43,33 @@ jobs:
                    ./ .hf/
           # The Space requires YAML front matter in README.md.
           cp deploy/README_SPACE.md .hf/README.md
+          # The Space needs different .gitattributes than GitHub does. Hugging
+          # Face puts anything over ~10 MB in LFS, and a file is only restored
+          # from LFS on checkout when a filter is declared for it. Without this
+          # the Docker build copies 133-byte pointers instead of the model and
+          # the warehouse. On GitHub those same files are ordinary blobs, so
+          # declaring LFS there would push them into it for no reason.
+          cp deploy/gitattributes_space.txt .hf/.gitattributes
+
+      - name: Verify the payload carries real files, not LFS pointers
+        run: |
+          # A pointer is ~133 bytes. Fail loudly here rather than shipping an
+          # image that only breaks once a user opens the app.
+          fail=0
+          for f in .hf/data/gold/gridpulse_app.duckdb \
+                   .hf/artifacts/gbm/point.txt \
+                   .hf/artifacts/gbm_hybrid/point.txt; do
+            if [ ! -f "$f" ]; then
+              echo "::error::missing $f"; fail=1; continue
+            fi
+            size=$(stat -c%s "$f")
+            if head -c 60 "$f" | grep -q 'git-lfs.github.com/spec'; then
+              echo "::error::$f is an LFS pointer ($size bytes), not the real file"; fail=1
+            else
+              echo "ok: $f ($size bytes)"
+            fi
+          done
+          exit $fail
 
       - name: Push to the Space
         env:
