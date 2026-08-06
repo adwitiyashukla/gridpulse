@@ -1,0 +1,77 @@
+name: Sync to Hugging Face Space
+
+# Mirrors this repository to a Hugging Face Docker Space, so GitHub, the Space
+# and the local environment stay identical.
+#
+# The Space runs the same Dockerfile as local development, serving the Streamlit
+# app on port 7860. `deploy/README_SPACE.md` carries the YAML front matter the
+# Space requires and is swapped in during the sync, which keeps the GitHub README
+# free of Hugging Face metadata.
+#
+# Requires:
+#   secret   HF_TOKEN     a write token from https://huggingface.co/settings/tokens
+#   variable HF_USERNAME  optional, defaults to adwitiyashukla
+#   variable HF_SPACE     optional, defaults to gridpulse
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Push to Hugging Face
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      # The Python API rather than the CLI. `huggingface-cli` was retired and
+      # now refuses to run, and its replacement has already been renamed once.
+      # HfApi is the stable interface, and upload_folder handles Git LFS
+      # automatically for the committed DuckDB artifact.
+      - name: Install huggingface_hub
+        run: pip install "huggingface_hub>=0.27"
+
+      - name: Prepare the Space payload
+        run: |
+          rm -rf .hf && mkdir .hf
+          rsync -a --exclude='.git' --exclude='.hf' --exclude='data/bronze' \
+                   --exclude='data/silver' --exclude='mlruns' --exclude='.venv' \
+                   ./ .hf/
+          # The Space requires YAML front matter in README.md.
+          cp deploy/README_SPACE.md .hf/README.md
+
+      - name: Push to the Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: ${{ vars.HF_USERNAME || 'adwitiyashukla' }}
+          HF_SPACE: ${{ vars.HF_SPACE || 'gridpulse' }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          token = os.environ.get("HF_TOKEN")
+          if not token:
+              print("::warning::HF_TOKEN is not configured; skipping the Space sync.")
+              sys.exit(0)
+
+          from huggingface_hub import HfApi
+
+          repo_id = f"{os.environ['HF_USERNAME']}/{os.environ['HF_SPACE']}"
+          api = HfApi(token=token)
+
+          print(f"Uploading .hf/ to space {repo_id} ...")
+          api.upload_folder(
+              folder_path=".hf",
+              repo_id=repo_id,
+              repo_type="space",
+              commit_message=f"Sync from GitHub {os.environ['COMMIT_SHA'][:7]}",
+              ignore_patterns=[".git/*", ".github/workflows/*.yml"],
+          )
+          print(f"Done: https://huggingface.co/spaces/{repo_id}")
+          PY

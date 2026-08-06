@@ -1,11 +1,16 @@
 # Local stack: the API and the dashboard side by side.
 #   docker compose up
+#
+# The image defaults to the Streamlit app on port 7860 (the Hugging Face Spaces
+# convention). Both services override PORT explicitly so local ports stay
+# familiar and the two containers do not collide.
 services:
   api:
     build: .
     container_name: gridpulse-api
     environment:
       GRIDPULSE_SERVICE: api
+      PORT: 8000
       EIA_API_KEY: ${EIA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
     ports:
@@ -20,6 +25,7 @@ services:
     depends_on: [api]
     environment:
       GRIDPULSE_SERVICE: app
+      PORT: 8501
       EIA_API_KEY: ${EIA_API_KEY:-}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
     ports:
