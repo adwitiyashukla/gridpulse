@@ -83,11 +83,19 @@ jobs:
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
         run: gridpulse export
 
+      # Retraining changes every metric the README quotes. Without this the
+      # published table silently drifts away from artifacts/leaderboard.json,
+      # and a README claiming accuracy the models no longer achieve is worse
+      # than no README at all. The script fails loudly if the leaderboard or
+      # the RESULTS markers are missing.
+      - name: Regenerate the README results table
+        run: python scripts/update_readme.py
+
       - name: Commit refreshed artifacts
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f data/gold/gridpulse_app.duckdb artifacts/
+          git add -f data/gold/gridpulse_app.duckdb artifacts/ README.md
           if git diff --staged --quiet; then
             echo "Nothing changed."
           else
