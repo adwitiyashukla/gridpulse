@@ -69,6 +69,65 @@ def database_path() -> Path:
     return slim if slim.exists() else ROOT / "data" / "gold" / "gridpulse.duckdb"
 
 
+def data_version() -> str:
+    """Identify the currently deployed artifacts by size and modification time.
+
+    Every cached function below carries its own 900 second expiry, and each of
+    those clocks starts when that function is first called rather than when the
+    data changed. The caches therefore expire at different moments, and in the
+    window between them the page can report an hourly row count from one
+    training run beside an accuracy figure from the previous one. Both numbers
+    are individually correct and the pair is wrong, which is the least useful
+    kind of error to put in front of someone.
+
+    The weekly refresh rewrites the warehouse and the headline together, so
+    comparing their size and mtime detects a new deployment directly instead of
+    waiting for a timer to guess that one happened.
+    """
+    parts = []
+    for path in (database_path(), ROOT / "artifacts" / "headline.json"):
+        try:
+            stat = path.stat()
+            parts.append(f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}")
+        except OSError:
+            parts.append(f"{path.name}:absent")
+    return "|".join(parts)
+
+
+@st.cache_resource
+def _deployed_version() -> dict[str, str | None]:
+    """Hold the last seen data version, shared across every user session.
+
+    Deliberately `cache_resource` rather than `session_state`. Session state is
+    per visitor, so the check below would fire once for each new arrival and
+    every one of them would clear a cache that was already correct. A resource
+    is shared process-wide, so the artifacts are detected as changed exactly
+    once no matter how many people are on the page. `st.cache_data.clear()`
+    does not touch `cache_resource`, so this record survives the clearing it
+    triggers.
+    """
+    return {"version": None}
+
+
+def invalidate_caches_if_data_changed() -> None:
+    """Expire every cache at once when the artifacts change underneath us.
+
+    Streamlit Cloud reruns the script when a new commit lands but does not
+    always restart the process, so `st.cache_data` entries can outlive the files
+    they were derived from. Clearing on a version change makes a refresh visible
+    immediately and, more importantly, keeps the numbers on the page mutually
+    consistent.
+    """
+    record = _deployed_version()
+    current = data_version()
+    if record["version"] != current:
+        st.cache_data.clear()
+        record["version"] = current
+
+
+invalidate_caches_if_data_changed()
+
+
 @st.cache_data(ttl=900, show_spinner=False)
 def run_query(sql: str, params: tuple = ()) -> pd.DataFrame:
     path = database_path()
