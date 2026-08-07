@@ -23,6 +23,9 @@ on:
 
 permissions:
   contents: write
+  # Needed to dispatch the Space sync at the end of the job. See that step for
+  # why the sync cannot simply trigger itself.
+  actions: write
 
 jobs:
   refresh:
@@ -92,16 +95,37 @@ jobs:
         run: python scripts/update_readme.py
 
       - name: Commit refreshed artifacts
+        id: commit
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -f data/gold/gridpulse_app.duckdb artifacts/ README.md
           if git diff --staged --quiet; then
             echo "Nothing changed."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore: automated data refresh $(date -u +%Y-%m-%d)"
             git push
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # GitHub deliberately does not start a workflow from a push made with the
+      # default GITHUB_TOKEN, which is what prevents a workflow from triggering
+      # itself forever. The consequence here is that the commit above redeploys
+      # Streamlit, which reads GitHub directly, but never fires the Hugging Face
+      # sync. The two public deployments would then drift apart a little more
+      # every week, with no error anywhere to say so.
+      #
+      # workflow_dispatch is the documented exception to that rule: it does
+      # start a run even when dispatched with GITHUB_TOKEN. So the sync is
+      # requested explicitly rather than left to a push event that will not
+      # arrive. The dispatched run checks out main after this commit landed, so
+      # it mirrors the refreshed artifacts rather than the previous ones.
+      - name: Mirror the refreshed repository to the Space
+        if: steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run sync-huggingface.yml --ref main
 
       - name: Job summary
         if: always()
