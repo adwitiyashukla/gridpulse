@@ -1,22 +1,4 @@
-"""Naive and classical statistical baselines.
-
-Every forecasting claim is meaningless without a floor to compare against. These
-three establish it:
-
-**Seasonal naive (24h)**
-    Tomorrow at 3pm equals today at 3pm. Trivial, and startlingly hard to beat.
-
-**Weekly naive (168h)**
-    Tomorrow at 3pm equals the same weekday last week at 3pm. Usually stronger than
-    the daily variant because it preserves the weekday/weekend regime.
-
-**Holt-Winters**
-    Triple exponential smoothing with a daily seasonal cycle: a real statistical
-    model, no exogenous inputs, representing what a utility analyst could build in
-    a spreadsheet.
-
-If a deep network cannot beat weekly naive, the deep network is not working.
-"""
+"""Simple baselines to beat: seasonal naive, weekly naive and Holt-Winters."""
 
 from __future__ import annotations
 

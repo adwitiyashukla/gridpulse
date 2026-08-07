@@ -1,27 +1,4 @@
-"""LightGBM demand forecasting, with P10/P50/P90 prediction bands.
-
-I train one model across all 12 regions, with the region code as a categorical
-feature, instead of 12 separate models. Reasons:
-
-* The regions behave similarly. How demand responds to temperature in Atlanta
-  really does tell you something about the same curve in Charlotte, so training
-  together helps the smaller regions.
-* One model file is one thing to deploy, version and keep an eye on. Twelve
-  models are twelve of everything.
-* Adding a thirteenth region is then just more data, not more infrastructure.
-
-This only works if the demand is scaled first. The regions differ by a factor of
-about a hundred (ISNE peaks around 25 GW, PJM around 150 GW), so if you train on
-raw megawatthours the loss is completely dominated by the biggest regions. The
-model spends all its effort on PJM and never learns the small ones. Scaling each
-region separately puts them on a comparable footing, and predictions get converted
-back to MW before anything is scored. Without this step the model gives up after a
-handful of trees, which is exactly what happened before I added it.
-
-As well as the single number forecast, three more models predict the 10th, 50th
-and 90th percentiles. Utilities do not plan against a single number, they plan
-against a realistic worst case, so the range is the more useful output.
-"""
+"""One LightGBM model across all 12 regions, plus P10/P50/P90 prediction bands."""
 
 from __future__ import annotations
 
@@ -43,12 +20,7 @@ CATEGORICAL = ["ba_code"]
 
 @dataclass
 class BATargetScaler:
-    """Scales demand separately for each region, so they can share one model.
-
-    The numbers are worked out from the training rows only, never the test rows.
-    ``inverse`` converts predictions back into megawatthours, so every metric
-    downstream is reported in real units rather than scaled ones.
-    """
+    """Scales demand separately for each region so they can share one model."""
 
     stats: dict[str, tuple[float, float]]
     global_mean: float
@@ -56,20 +28,9 @@ class BATargetScaler:
 
     @classmethod
     def fit(cls, frame: pd.DataFrame) -> BATargetScaler:
-        """Work out the middle and the spread of demand for each region.
-
-        I use the median and the IQR here instead of the mean and standard
-        deviation. One impossible reading can drag a mean anywhere it likes, and
-        the real EIA data does occasionally contain values that are wildly too
-        big. A single row like that pushed PJM's standard deviation up to 10.7
-        million MW when the real range is about 70,000 to 165,000 MW, which
-        wrecked the scaling and every prediction that depended on it. The median
-        does not move no matter how extreme one value is.
-        """
+        """Median and IQR per region, so one bad reading cannot skew the scaling."""
         grouped = frame.groupby("ba_code")[TARGET]
         centre = grouped.median()
-        # Dividing the IQR by 1.349 puts it on roughly the same scale as a
-        # standard deviation would be, so the scaled values stay familiar.
         spread = (grouped.quantile(0.75) - grouped.quantile(0.25)) / 1.349
 
         stats = {
@@ -154,7 +115,6 @@ class TrainedGBM:
     best_iteration: int
     target_scaler: BATargetScaler
 
-    # -- persistence ------------------------------------------------------
     def save(self, directory: Path | None = None) -> Path:
         target = Path(directory) if directory else PATHS.artifacts / "gbm"
         target.mkdir(parents=True, exist_ok=True)
@@ -196,7 +156,6 @@ class TrainedGBM:
             target_scaler=BATargetScaler.from_dict(meta["target_scaler"]),
         )
 
-    # -- inference --------------------------------------------------------
     def predict(self, frame: pd.DataFrame) -> pd.DataFrame:
         """Point and quantile predictions, returned in megawatthours.
 
@@ -212,7 +171,6 @@ class TrainedGBM:
             out[f"pred_gbm_p{int(q * 100)}"] = self.target_scaler.inverse(
                 model.predict(matrix), ba_codes
             )
-        # Quantile models are fit independently and can cross; enforce monotonicity.
         quantile_columns = [c for c in out.columns if c.startswith("pred_gbm_p")]
         out[quantile_columns] = np.sort(out[quantile_columns].to_numpy(), axis=1)
         return out
@@ -257,8 +215,6 @@ def train_gbm(
     ba_categories = sorted(pd.concat([train["ba_code"], valid["ba_code"]]).unique().tolist())
     features = list(features) if features else list(FEATURE_COLUMNS)
 
-    # Fitted on training rows only, so no validation information leaks into the
-    # normalisation constants.
     target_scaler = BATargetScaler.fit(train)
 
     x_train = prepare_matrix(train, ba_categories, features)
@@ -286,9 +242,6 @@ def train_gbm(
     )
     logger.info("  point model stopped at iteration %d", point.best_iteration)
 
-    # Quantile models are three additional fits. They are capped well below the
-    # point model's round count: interval edges need far less resolution than the
-    # central estimate, and the extra rounds cost real minutes on a CPU.
     quantile_rounds = int(min(max(200, point.best_iteration), 250 if quick else 700))
     quantile_models: dict[float, object] = {}
     for q in quantiles or ():

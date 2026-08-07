@@ -1,10 +1,5 @@
-"""GridPulse public web application.
-
-Runs locally or on Streamlit Community Cloud from the same file. The app reads the
-slim DuckDB artifact committed alongside it and the pre-trained model files, so it
-starts instantly and never trains on the request path. Live weather is fetched on
-demand to produce genuinely forward-looking forecasts.
-"""
+"""The public GridPulse website. Reads the committed database and model files, so
+it starts instantly and never trains anything while someone is waiting."""
 
 from __future__ import annotations
 
@@ -23,9 +18,6 @@ sys.path.insert(0, str(ROOT / "src"))
 from gridpulse.config import BALANCING_AUTHORITIES  # noqa: E402
 from gridpulse.warehouse.duck import connect  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Page setup
-# ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="GridPulse | US Electricity Demand Intelligence",
     page_icon="⚡",
@@ -61,9 +53,6 @@ st.markdown(
 )
 
 
-# ---------------------------------------------------------------------------
-# Data access
-# ---------------------------------------------------------------------------
 def database_path() -> Path:
     slim = ROOT / "data" / "gold" / "gridpulse_app.duckdb"
     return slim if slim.exists() else ROOT / "data" / "gold" / "gridpulse.duckdb"
@@ -161,9 +150,6 @@ def data_ready() -> bool:
     ).empty
 
 
-# ---------------------------------------------------------------------------
-# Header
-# ---------------------------------------------------------------------------
 head = headline()
 skill = head.get("skill_vs_eia_pct")
 
@@ -192,9 +178,6 @@ if not data_ready():
     )
     st.stop()
 
-# ---------------------------------------------------------------------------
-# Sidebar
-# ---------------------------------------------------------------------------
 with st.sidebar:
     st.header("Controls")
     bas = available_bas()
@@ -224,9 +207,6 @@ with st.sidebar:
         "[GitHub repository](https://github.com/adwitiyashukla/gridpulse) · Data: US EIA + Open-Meteo"
     )
 
-# ---------------------------------------------------------------------------
-# Headline metrics
-# ---------------------------------------------------------------------------
 c1, c2, c3, c4 = st.columns(4)
 summary = run_query(
     """
@@ -252,9 +232,6 @@ tabs = st.tabs([
 ])
 
 
-# ---------------------------------------------------------------------------
-# Tab 1: Forecast
-# ---------------------------------------------------------------------------
 with tabs[0]:
     st.subheader(f"24-hour demand forecast - {selected_ba}")
     st.caption(
@@ -292,9 +269,6 @@ with tabs[0]:
         for note in notes:
             st.caption(f"↳ {note}")
 
-        # demand_clean_mwh excludes readings the warehouse flagged as physically
-        # implausible. The raw column deliberately retains them as evidence, but a
-        # telemetry fault should not be drawn as though it were real load.
         history = run_query(
             """
             SELECT period_utc, demand_clean_mwh AS demand_mwh
@@ -355,9 +329,6 @@ with tabs[0]:
         st.info("Choose a balancing authority in the sidebar and press **Generate forecast**.")
 
 
-# ---------------------------------------------------------------------------
-# Tab 2: Explorer
-# ---------------------------------------------------------------------------
 with tabs[1]:
     st.subheader(f"Historical explorer - {selected_ba}")
 
@@ -402,9 +373,6 @@ with tabs[1]:
                     labels={"temperature_2m": "Temperature (°C)", "demand_mwh": "Demand (MW)"},
                 )
 
-                # Binned median rather than a lowess fit. It needs no extra
-                # dependency, is robust to the outliers this data genuinely
-                # contains, and traces the V-curve more legibly than a smoother.
                 binned = (
                     scatter.assign(bin=(scatter["temperature_2m"] / 2).round() * 2)
                     .groupby("bin")["demand_mwh"]
@@ -465,9 +433,6 @@ with tabs[1]:
             st.plotly_chart(figure, use_container_width=True)
 
 
-# ---------------------------------------------------------------------------
-# Tab 3: Leaderboard
-# ---------------------------------------------------------------------------
 with tabs[2]:
     st.subheader("Model leaderboard")
     st.caption(
@@ -495,10 +460,6 @@ with tabs[2]:
         }
         board["Model"] = board["model"].map(lambda m: pretty.get(m, m))
 
-        # Sorted worst-first so the best model lands at the top of a horizontal
-        # bar chart. Colour is applied per-bar via marker_color rather than
-        # plotly's `color=` argument: that argument splits the data into one
-        # trace per colour group, which silently destroys the sort order.
         ordered = board.sort_values("mape_pct", ascending=False)
         bar_colours = [
             ACCENT_2 if model == "eia_official" else ACCENT
@@ -564,9 +525,6 @@ with tabs[2]:
             st.plotly_chart(figure, use_container_width=True)
 
 
-# ---------------------------------------------------------------------------
-# Tab 4: Anomalies
-# ---------------------------------------------------------------------------
 with tabs[3]:
     st.subheader("Anomaly monitor")
     st.caption(
@@ -611,9 +569,6 @@ with tabs[3]:
         st.dataframe(recent, use_container_width=True, hide_index=True, height=380)
 
 
-# ---------------------------------------------------------------------------
-# Tab 5: Data quality
-# ---------------------------------------------------------------------------
 with tabs[4]:
     st.subheader("Data quality scorecard")
     st.caption(
@@ -660,9 +615,6 @@ with tabs[4]:
         )
 
 
-# ---------------------------------------------------------------------------
-# Tab 6: AI agent
-# ---------------------------------------------------------------------------
 with tabs[5]:
     st.subheader("Ask the Grid")
     st.caption(
@@ -707,7 +659,6 @@ with tabs[5]:
 
                 st.dataframe(answer.data, use_container_width=True, hide_index=True, height=380)
 
-                # Offer a chart when the shape obviously supports one.
                 numeric = answer.data.select_dtypes("number").columns.tolist()
                 if len(answer.data) > 1 and numeric:
                     label_columns = [c for c in answer.data.columns if c not in numeric]
@@ -724,9 +675,6 @@ with tabs[5]:
                             pass
 
 
-# ---------------------------------------------------------------------------
-# Tab 7: How it works
-# ---------------------------------------------------------------------------
 with tabs[6]:
     st.subheader("How GridPulse works")
 

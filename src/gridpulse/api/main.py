@@ -1,13 +1,4 @@
-"""GridPulse REST API.
-
-A thin, documented HTTP surface over the warehouse, the trained models and the
-analytics agent. FastAPI generates OpenAPI docs at ``/docs`` automatically, so the
-service is self-describing.
-
-Run locally::
-
-    uvicorn gridpulse.api.main:app --reload --port 8000
-"""
+"""REST API over the warehouse and models. Docs at /docs when the server runs."""
 
 from __future__ import annotations
 
@@ -55,9 +46,6 @@ def _query(sql: str, params: list | None = None):
         raise HTTPException(status_code=503, detail=f"Warehouse unavailable: {exc}") from exc
 
 
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
 class HealthResponse(BaseModel):
     status: str
     warehouse_present: bool
@@ -77,9 +65,6 @@ class AskRequest(BaseModel):
     summarise: bool = True
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
 @app.get("/", include_in_schema=False)
 def root() -> dict[str, Any]:
     return {"service": "GridPulse API", "version": "1.0.0", "docs": "/docs"}

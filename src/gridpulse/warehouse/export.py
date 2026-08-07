@@ -1,16 +1,7 @@
-"""Build the slim deployment artifact the public app ships with.
+"""Writes the small DuckDB file the public app ships with, about 13 MB.
 
-The development warehouse holds years of hourly history across every table. Git and
-free-tier hosting do not want that. This module distils it into a compact DuckDB
-file containing only what the public site actually reads:
-
-* a rolling window of recent hourly demand, weather and forecasts,
-* pre-computed model predictions over the evaluation window,
-* the model leaderboard and data quality scorecard,
-* flagged anomalies.
-
-The app therefore starts instantly with no retraining and no warehouse dependency,
-while still calling the live EIA API for anything newer than the last export.
+The full warehouse is 129 MB, which is too big for Git and for free hosting, so
+this keeps only a rolling window of what the website actually reads.
 """
 
 from __future__ import annotations
@@ -26,7 +17,7 @@ from gridpulse.warehouse.duck import connect, row_count
 logger = logging.getLogger(__name__)
 
 APP_DB_NAME = "gridpulse_app.duckdb"
-EXPORT_WINDOW_DAYS = 400  # a little over a year, so the app can show YoY comparisons
+EXPORT_WINDOW_DAYS = 400
 
 
 def export_for_app(window_days: int = EXPORT_WINDOW_DAYS, destination: Path | None = None) -> Path:
@@ -48,16 +39,11 @@ def export_for_app(window_days: int = EXPORT_WINDOW_DAYS, destination: Path | No
     with connect(target) as con:
         con.execute(f"ATTACH '{source.as_posix()}' AS wh (READ_ONLY)")
 
-        # Dimensions are small; copy wholesale.
         for table in ("dim_ba", "dim_date"):
             if _exists_in(con, "wh", table):
                 con.execute(f"CREATE TABLE {table} AS SELECT * FROM wh.{table}")
                 manifest[table] = row_count(con, table)
 
-        # The main fact, trimmed to the rolling window. The column list is derived
-        # from WEATHER_VARIABLES rather than hand-written: a hand-written list
-        # silently drops columns the feature builder needs, and the failure only
-        # surfaces at inference time on the deployed site.
         if _exists_in(con, "wh", "fact_demand_hourly"):
             columns = ", ".join([
                 "period_utc", "ba_code", "date_local", "hour_local",
@@ -122,7 +108,6 @@ def _exists_in(con, schema: str, table: str) -> bool:
     ).fetchone()
     if found and found[0]:
         return True
-    # DuckDB reports attached databases via the catalog column in some versions.
     found = con.execute(
         "SELECT count(*) FROM information_schema.tables WHERE table_catalog = ? AND table_name = ?",
         [schema, table],

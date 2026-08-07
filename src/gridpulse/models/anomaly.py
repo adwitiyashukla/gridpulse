@@ -1,31 +1,5 @@
-"""Finding unusual hours: broken meters, sudden demand changes and strange days.
-
-I use three detectors and make them vote, because each one on its own misses a
-different kind of problem:
-
-**Seasonal z-score**
-    Compares each hour against the median demand for that region, at that hour of
-    the day, in that month, then scales by the median absolute deviation. I use
-    MAD rather than standard deviation because the weird values I am looking for
-    would inflate a standard deviation and end up hiding themselves. This catches
-    single spikes and drops, but it misses slow drift over several hours.
-
-**Isolation Forest**
-    Looks at several things at once: demand level, how fast demand is changing,
-    temperature, and how demand relates to temperature. This catches combinations
-    that look fine one at a time. Normal demand at a normal temperature can still
-    be odd if those two never usually go together.
-
-**Autoencoder on the daily shape**
-    A small neural network squeezes each day's 24 hour shape down to 8 numbers and
-    then tries to rebuild it. Days whose shape is unlike anything it trained on come
-    back badly rebuilt, even if every individual hour looks normal on its own. This
-    is the one that spots holidays acting like weekends, storm days, and days where
-    customers were paid to use less power.
-
-Making them vote keeps the false alarms down: an hour is only marked ``high``
-severity when at least two of the three detectors agree it is strange.
-"""
+"""Finds unusual hours using three detectors that have to agree: seasonal
+z-score, Isolation Forest and an autoencoder trained on daily demand shapes."""
 
 from __future__ import annotations
 
@@ -40,14 +14,11 @@ from gridpulse.warehouse.duck import connect, query
 
 logger = logging.getLogger(__name__)
 
-Z_THRESHOLD = 4.0          # robust z beyond which an hour is suspicious
-CONTAMINATION = 0.01       # expected anomaly rate for Isolation Forest
-AE_PERCENTILE = 99.0       # reconstruction-error percentile defining "unusual shape"
+Z_THRESHOLD = 4.0
+CONTAMINATION = 0.01
+AE_PERCENTILE = 99.0
 
 
-# ---------------------------------------------------------------------------
-# Detector 1: robust seasonal z-score
-# ---------------------------------------------------------------------------
 def robust_seasonal_z(frame: pd.DataFrame, target: str = "demand_mwh") -> pd.Series:
     """Median-absolute-deviation z-score within (BA, hour-of-day, month) cells."""
     work = frame[["ba_code", "hour_local", "month", target]].copy()
@@ -55,14 +26,10 @@ def robust_seasonal_z(frame: pd.DataFrame, target: str = "demand_mwh") -> pd.Ser
 
     median = grouped.transform("median")
     mad = grouped.transform(lambda s: (s - s.median()).abs().median())
-    # 0.6745 rescales MAD to be comparable with a standard deviation under normality.
     scale = (mad / 0.6745).replace(0, np.nan)
     return ((work[target] - median) / scale).abs().fillna(0.0)
 
 
-# ---------------------------------------------------------------------------
-# Detector 2: Isolation Forest
-# ---------------------------------------------------------------------------
 ISO_FEATURES = ["demand_mwh", "ramp_mwh", "ramp_pct", "temperature_2m", "demand_per_degree"]
 
 
@@ -70,8 +37,6 @@ def _isolation_features(frame: pd.DataFrame) -> pd.DataFrame:
     work = frame.copy()
     work["ramp_mwh"] = work.groupby("ba_code")["demand_mwh"].diff()
     work["ramp_pct"] = work["ramp_mwh"] / work.groupby("ba_code")["demand_mwh"].shift(1) * 100
-    # Demand normalised by distance from the comfort balance point: how much load
-    # each degree of heating or cooling demand is buying.
     departure = (work["temperature_2m"] - 18.0).abs().clip(lower=0.5)
     work["demand_per_degree"] = work["demand_mwh"] / departure
     return work[ISO_FEATURES].replace([np.inf, -np.inf], np.nan)
@@ -92,24 +57,13 @@ def isolation_forest_scores(frame: pd.DataFrame, contamination: float = CONTAMIN
         ),
     )
     model.fit(features)
-    # decision_function is high for normal points; negate so high means anomalous.
     raw = -model[-1].decision_function(model[:-1].transform(features))
     return pd.Series(raw, index=frame.index), model
 
 
-# ---------------------------------------------------------------------------
-# Detector 3: daily-profile autoencoder
-# ---------------------------------------------------------------------------
 def _daily_profiles(frame: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]:
-    """Reshape into one normalised 24-value vector per (BA, local date).
-
-    Each day is divided by its own **median** so the autoencoder learns load
-    *shape* rather than which BA is largest. The median is used instead of the
-    mean because a single corrupt hour drags a mean toward itself; if that mean
-    lands near zero the division explodes and the reconstruction loss becomes
-    meaningless. Days whose level is not comfortably positive are dropped rather
-    than rescued, since their shape cannot be trusted anyway.
-    """
+    """Turn each day into 24 numbers scaled by that day's median, so the model
+    learns the shape of a day rather than which region is biggest."""
     pivot = (
         frame.pivot_table(index=["ba_code", "date_local"], columns="hour_local",
                           values="demand_mwh", aggfunc="mean")
@@ -130,8 +84,6 @@ def _daily_profiles(frame: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]:
         return np.empty((0, 24), dtype=np.float32), pd.DataFrame()
 
     normalised = values / level
-    # A normalised day should sit near 1.0 throughout. Anything beyond this band
-    # is a corrupt reading, not a load shape, and would dominate the loss.
     keep = (normalised > 0.05).all(axis=1) & (normalised < 20.0).all(axis=1)
     dropped = int((~keep).sum())
     if dropped:
@@ -160,7 +112,7 @@ def autoencoder_scores(frame: pd.DataFrame, quick: bool = False) -> pd.DataFrame
 
     model = nn.Sequential(
         nn.Linear(n_hours, 32), nn.ReLU(),
-        nn.Linear(32, 8), nn.ReLU(),          # bottleneck
+        nn.Linear(32, 8), nn.ReLU(),
         nn.Linear(8, 32), nn.ReLU(),
         nn.Linear(32, n_hours),
     )
@@ -194,9 +146,6 @@ def autoencoder_scores(frame: pd.DataFrame, quick: bool = False) -> pd.DataFrame
     return out
 
 
-# ---------------------------------------------------------------------------
-# Orchestration
-# ---------------------------------------------------------------------------
 def classify_anomaly(row: pd.Series) -> str:
     """Human-readable label so an operator knows what they are looking at."""
     if row.get("flag_frozen_reading"):
@@ -230,29 +179,23 @@ def run_anomaly_detection(quick: bool = False, persist: bool = True) -> pd.DataF
 
     frame["period_utc"] = pd.to_datetime(frame["period_utc"], utc=True)
 
-    # Physically impossible readings are already flagged by the warehouse and
-    # reported by the quality suite. Feeding them to statistical detectors would
-    # let them define the very distribution used to judge everything else.
     implausible = frame["flag_implausible_magnitude"].fillna(False).astype(bool)
     if implausible.any():
         logger.info("  excluding %d implausible reading(s) from scoring", int(implausible.sum()))
     scored = frame[frame["demand_mwh"].notna() & ~implausible].copy()
     logger.info("Scoring %s hours for anomalies", f"{len(scored):,}")
 
-    # Detector 1
     logger.info("  detector 1/3: robust seasonal z-score")
     scored["robust_z"] = robust_seasonal_z(scored)
     grouped = scored.groupby(["ba_code", "hour_local", "month"])["demand_mwh"]
     scored["residual_sign"] = np.sign(scored["demand_mwh"] - grouped.transform("median"))
 
-    # Detector 2
     logger.info("  detector 2/3: isolation forest")
     scored["iso_score"], _ = isolation_forest_scores(scored)
     scored["iso_flag"] = scored["iso_score"] > scored["iso_score"].quantile(1 - CONTAMINATION)
     scored["ramp_mwh"] = scored.groupby("ba_code")["demand_mwh"].diff()
     scored["ramp_pct"] = scored["ramp_mwh"] / scored.groupby("ba_code")["demand_mwh"].shift(1) * 100
 
-    # Detector 3
     logger.info("  detector 3/3: daily-profile autoencoder")
     daily = autoencoder_scores(scored, quick=quick)
     if not daily.empty:
@@ -266,7 +209,6 @@ def run_anomaly_detection(quick: bool = False, persist: bool = True) -> pd.DataF
 
     scored["ae_anomalous_day"] = scored["ae_anomalous_day"].astype("boolean").fillna(False).astype(bool)
 
-    # Consensus
     scored["z_flag"] = scored["robust_z"] > Z_THRESHOLD
     def _as_bool(column: str) -> pd.Series:
         return scored[column].astype("boolean").fillna(False).astype(bool)

@@ -1,20 +1,7 @@
-"""Runs the training: builds the features, fits every model, scores them the same way.
+"""Builds the features, trains every model, and scores them all on the same rows.
 
-Comparing them fairly is the whole point. Six forecasters are tested on exactly the
-same set of held-out hours, and the one they are compared against is not a baseline
-I made up. It is the day-ahead forecast the EIA published and grid operators
-actually used:
-
-1. Seasonal naive, meaning "same hour yesterday"
-2. Weekly naive, meaning "same hour last week"
-3. **EIA's official day-ahead forecast**  <- the one to beat
-4. LightGBM trained on all regions, with P10/P50/P90 bands
-5. LSTM, which also gets tomorrow's weather and calendar
-6. Transformer, same inputs as the LSTM
-
-Every model is scored on the same rows, over the same 24 hours ahead, with the same
-metrics. The results go into ``model_scores`` and ``model_predictions``, and each
-run is logged to MLflow.
+The benchmark is EIA's own published day-ahead forecast, not a baseline invented
+here. Results go to ``model_scores`` and ``model_predictions``, and to MLflow.
 """
 
 from __future__ import annotations
@@ -53,9 +40,6 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
         mlflow.set_tracking_uri("file:" + str((PATHS.artifacts.parent / "mlruns").as_posix()))
         mlflow.set_experiment("gridpulse-day-ahead-load")
 
-    # ------------------------------------------------------------------
-    # Features and the single shared time split
-    # ------------------------------------------------------------------
     logger.info("Building feature matrix")
     frame = build_features(ba_codes=bas)
     if frame.empty:
@@ -77,9 +61,6 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
 
     predictions = test[["period_utc", "ba_code", "demand_mwh", "demand_forecast_mwh"]].copy()
 
-    # ------------------------------------------------------------------
-    # 1-3. Baselines and the EIA benchmark
-    # ------------------------------------------------------------------
     logger.info("Scoring baselines")
     with_baselines = baselines.build_all_baselines(frame)
     baseline_test = with_baselines[with_baselines["period_utc"] >= test_start]
@@ -87,9 +68,6 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
         if column in baseline_test.columns:
             predictions[column] = baseline_test[column].to_numpy()
 
-    # ------------------------------------------------------------------
-    # 4. LightGBM
-    # ------------------------------------------------------------------
     logger.info("Training LightGBM")
     from gridpulse.models.gbm import train_gbm
 
@@ -99,19 +77,6 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
         predictions[column] = gbm_predictions[column].to_numpy()
     gbm.save()
 
-    # ------------------------------------------------------------------
-    # 4b. Hybrid version: the same model, but it also gets to read EIA's
-    # published day-ahead forecast as one of its inputs.
-    #
-    # This is not cheating. EIA publishes that forecast the day before, so it
-    # really is available at prediction time, and no real utility ignores a
-    # forecast they already have. This version learns to correct the mistakes EIA
-    # consistently makes, instead of working the whole thing out from scratch,
-    # which is closer to how a real forecasting team works anyway.
-    #
-    # I report both. The plain model answers "can I beat them starting from
-    # nothing", and the hybrid answers "can I improve on what they publish".
-    # ------------------------------------------------------------------
     if train["demand_forecast_mwh"].notna().mean() > 0.9:
         logger.info("Training LightGBM hybrid (EIA forecast as an input feature)")
         from gridpulse.features.build import FEATURE_COLUMNS
@@ -129,9 +94,6 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
     )
     logger.info("Top features:\n%s", importance.head(12).to_string(index=False))
 
-    # ------------------------------------------------------------------
-    # 5-6. Deep models
-    # ------------------------------------------------------------------
     for architecture in ("lstm", "transformer"):
         try:
             logger.info("Training deep model: %s", architecture)
@@ -154,19 +116,12 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
         except Exception as exc:  # noqa: BLE001
             logger.error("Deep model %s failed: %s", architecture, exc, exc_info=True)
 
-    # ------------------------------------------------------------------
-    # Ensemble: simple average of the two strongest model families
-    # ------------------------------------------------------------------
     ensemble_parts = [c for c in ("pred_gbm", "pred_lstm") if c in predictions.columns]
     if len(ensemble_parts) > 1:
         predictions["pred_ensemble"] = predictions[ensemble_parts].mean(axis=1)
 
-    # ------------------------------------------------------------------
-    # Scoring
-    # ------------------------------------------------------------------
     leaderboard = _score(predictions)
 
-    # Interval calibration, reported only if the quantile models produced output.
     if {"pred_gbm_p10", "pred_gbm_p90"} <= set(predictions.columns):
         interval_coverage = metrics.coverage(
             predictions["demand_mwh"], predictions["pred_gbm_p10"], predictions["pred_gbm_p90"]

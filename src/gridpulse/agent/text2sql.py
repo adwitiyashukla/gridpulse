@@ -1,29 +1,8 @@
-"""Letting people ask questions in plain English instead of writing SQL.
+"""Turns plain English questions into DuckDB SQL, behind six safety checks.
 
-You can ask "which region had the worst forecast error last month?" and get a
-chart back rather than a SQL editor. The part I actually had to think about is not
-calling the LLM, which is about four lines of code. It is not trusting what comes
-back from it.
-
-There are six checks, in this order:
-
-1. **The connection is read-only.** I open the database with ``read_only=True``,
-   so even if someone completely tricked the model, it still could not change
-   anything.
-2. **Only one statement, and it has to be a SELECT.** It must start with
-   ``SELECT`` or ``WITH``. Anything else gets rejected before it runs.
-3. **Banned keywords.** Anything that creates, changes or deletes data is refused,
-   including when it is hidden inside a comment or tacked on after a semicolon.
-4. **A list of allowed tables.** Only my actual warehouse tables can be queried,
-   which stops anyone reading DuckDB's internal system tables.
-5. **A forced LIMIT.** If the model forgets one, I add it, so no single query can
-   return a huge amount of data.
-6. **The real schema goes into the prompt.** I read the actual table and column
-   names out of the database and put them in the prompt, so the model describes
-   real columns instead of inventing ones that sound plausible.
-
-The SQL it generated always comes back along with the answer. If you cannot see
-the query, you have no way to judge whether the answer is right.
+Read-only connection, one statement only, SELECT or WITH only, a banned keyword
+list, a table allowlist, and a forced LIMIT. The generated SQL is always returned
+alongside the answer.
 """
 
 from __future__ import annotations
@@ -106,9 +85,6 @@ class AgentAnswer:
         return self.error is None
 
 
-# ---------------------------------------------------------------------------
-# Guard
-# ---------------------------------------------------------------------------
 def _strip_fences(text: str) -> str:
     text = re.sub(r"^\s*```(?:sql)?\s*", "", text.strip(), flags=re.IGNORECASE)
     return re.sub(r"\s*```\s*$", "", text).strip()
@@ -145,7 +121,6 @@ def guard_sql(raw: str, allowed_tables: set[str] | None = None) -> str:
         match.lower()
         for match in re.findall(r"\b(?:from|join)\s+([a-zA-Z_][a-zA-Z0-9_]*)", body, flags=re.IGNORECASE)
     }
-    # CTE names are defined inline and are legitimate targets.
     cte_names = {m.lower() for m in re.findall(r"(?:with|,)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+as\s*\(", body, flags=re.IGNORECASE)}
     unknown = referenced - allowed - cte_names
     if unknown:
@@ -160,9 +135,6 @@ def guard_sql(raw: str, allowed_tables: set[str] | None = None) -> str:
     return body
 
 
-# ---------------------------------------------------------------------------
-# Schema grounding
-# ---------------------------------------------------------------------------
 def introspect_schema(database=None, tables: set[str] | None = None) -> str:
     """Render a compact schema description for the prompt."""
     wanted = tables or ALLOWED_TABLES
@@ -184,9 +156,6 @@ def introspect_schema(database=None, tables: set[str] | None = None) -> str:
     return "\n".join(lines) if lines else "(warehouse is empty)"
 
 
-# ---------------------------------------------------------------------------
-# Agent
-# ---------------------------------------------------------------------------
 class GridAgent:
     """Question in, validated SQL and a DataFrame out."""
 
@@ -270,7 +239,6 @@ class GridAgent:
             try:
                 sql = guard_sql(raw)
             except SQLGuardError as first_failure:
-                # One repair attempt: hand the model its own error and ask again.
                 warnings.append(f"First attempt rejected: {first_failure}")
                 logger.info("Guard rejected SQL, retrying: %s", first_failure)
                 repair = self._get_client().chat.completions.create(

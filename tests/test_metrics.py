@@ -17,15 +17,14 @@ def test_perfect_forecast_scores_zero_error():
 
 
 def test_mape_is_computed_correctly():
-    # A uniform 10 percent over-forecast must yield exactly 10 percent MAPE.
     truth = np.array([100.0, 200.0, 400.0])
     assert metrics.mape(truth, truth * 1.1) == pytest.approx(10.0)
 
 
 def test_rmse_penalises_large_errors_more_than_mae():
     truth = np.array([100.0, 100.0, 100.0, 100.0])
-    concentrated = np.array([100.0, 100.0, 100.0, 140.0])  # one big miss
-    spread = np.array([110.0, 110.0, 110.0, 110.0])        # four small misses
+    concentrated = np.array([100.0, 100.0, 100.0, 140.0])
+    spread = np.array([110.0, 110.0, 110.0, 110.0])
     assert metrics.mae(truth, concentrated) == pytest.approx(metrics.mae(truth, spread))
     assert metrics.rmse(truth, concentrated) > metrics.rmse(truth, spread)
 

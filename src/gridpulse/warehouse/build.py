@@ -1,26 +1,7 @@
-"""Turning raw downloads into the warehouse: bronze, then silver, then gold.
+"""Builds the warehouse in DuckDB: raw bronze, cleaned silver, star schema gold.
 
-Each of the three layers has one job:
-
-**Bronze**
-    The raw data exactly as it was downloaded, one row per region per hour per
-    measurement. I never edit it, only add to it, so if something goes wrong later
-    I can always go back and reproduce it.
-
-**Silver**
-    Cleaned up and reshaped. The measurements become columns, the weather gets
-    joined on, a full list of every hour makes any missing hours obvious, local
-    time is worked out for each region, and anything suspicious is *flagged rather
-    than deleted*. Deleting a bad reading also deletes the proof that a meter was
-    broken, and that proof is the useful part.
-
-**Gold**
-    A star schema, which is what the dashboard and the models read from. It has
-    lookup tables around `fact_demand_hourly`, plus a separate table that scores
-    EIA's own published forecast against what actually happened.
-
-All the heavy work is done in SQL over whole tables at once, rather than looping
-through rows in pandas, so memory stays flat no matter how much history there is.
+Bad readings are flagged rather than deleted, because deleting them also deletes
+the evidence that a meter was broken.
 """
 
 from __future__ import annotations
@@ -34,23 +15,10 @@ from gridpulse.warehouse.duck import connect, row_count, table_exists
 
 logger = logging.getLogger(__name__)
 
-# Physically implausible demand. Real BA demand never legitimately hits zero;
-# a zero or negative reading is a telemetry failure, not a quiet grid.
 MIN_PLAUSIBLE_MWH = 1.0
-# Hour-on-hour swings beyond this are almost always bad data, not real load.
 MAX_HOURLY_RAMP_PCT = 40.0
 
-# I find spikes by comparing each point against a rolling median centred on it,
-# rather than against the point before and after. Comparing to neighbours broke in
-# two ways when I tried it. It needs a threshold low enough to catch a spike that
-# is only extreme on one side, but high enough not to flag genuine fast changes.
-# And it cannot judge the very first or very last row at all, which is exactly
-# where the newest and least reliable data sits.
-#
-# A rolling median has neither problem. Total demand moves smoothly over five
-# hours, so a normal day never strays far from its local median, while a single
-# bad reading stands out no matter which side it falls on.
-SPIKE_WINDOW_HOURS = 2      # rows either side, so a 5 hour window centred on each point
+SPIKE_WINDOW_HOURS = 2
 SPIKE_DEVIATION_PCT = 20.0
 
 
@@ -100,7 +68,7 @@ def _dim_date_frame(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     frame["quarter"] = days.quarter
     frame["month"] = days.month
     frame["day_of_month"] = days.day
-    frame["day_of_week"] = days.dayofweek           # Monday = 0
+    frame["day_of_week"] = days.dayofweek
     frame["day_of_year"] = days.dayofyear
     frame["week_of_year"] = days.isocalendar().week.astype(int)
     frame["is_weekend"] = days.dayofweek >= 5
@@ -151,10 +119,6 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
 
     with connect() as con:
         if rebuild:
-            # Only the tables this function owns are dropped. Model scores,
-            # predictions and anomaly results belong to other commands; wiping
-            # them here would silently discard an hour of training because
-            # someone rebuilt the data layer.
             logger.info("Rebuild requested: dropping data-layer tables")
             for table in (
                 "fact_forecast_accuracy", "fact_demand_hourly",
@@ -173,17 +137,11 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
                     ", ".join(stale),
                 )
 
-        # ------------------------------------------------------------------
-        # Dimensions
-        # ------------------------------------------------------------------
         logger.info("Building dim_ba")
         con.register("_dim_ba", _dim_ba_frame())
         con.execute("CREATE OR REPLACE TABLE dim_ba AS SELECT * FROM _dim_ba")
         con.unregister("_dim_ba")
 
-        # ------------------------------------------------------------------
-        # Silver: pivot measures, attach weather, derive local civil time
-        # ------------------------------------------------------------------
         logger.info("Building silver_grid_hourly")
         con.execute(f"""
         CREATE OR REPLACE TEMP TABLE _eia_wide AS
@@ -207,11 +165,6 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
             weather_join = ""
             weather_select = weather_nulls
 
-        # A dense hourly spine per BA. Anti-joining against it is the only reliable
-        # way to distinguish "reported zero" from "never reported at all".
-        # Built in pandas rather than SQL: generate_series over TIMESTAMPTZ depends
-        # on the ICU extension and has shifted across DuckDB releases, whereas
-        # date_range is deterministic on every platform.
         bounds = con.execute(
             "SELECT ba_code, min(period_utc) AS lo, max(period_utc) AS hi "
             "FROM _eia_wide GROUP BY ba_code"
@@ -266,9 +219,6 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
         ORDER BY s.ba_code, s.period_utc
         """)
 
-        # ------------------------------------------------------------------
-        # Gold: calendar dimension sized to the observed data
-        # ------------------------------------------------------------------
         span = con.execute(
             "SELECT min(date_local), max(date_local) FROM silver_grid_hourly"
         ).fetchone()
@@ -283,12 +233,7 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
         )
         con.unregister("_dim_date")
 
-        # ------------------------------------------------------------------
-        # Gold: central fact
-        # ------------------------------------------------------------------
         logger.info("Building fact_demand_hourly")
-        # Robust per-BA bounds. Computed from the median so that the outliers being
-        # detected cannot influence the threshold that detects them.
         con.execute("""
         CREATE OR REPLACE TEMP TABLE _ba_bounds AS
         SELECT ba_code,
@@ -300,8 +245,6 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
         GROUP BY ba_code
         """)
 
-        # Local level for spike detection, computed once so the window function is
-        # not repeated across several expressions.
         con.execute("""
         CREATE OR REPLACE TEMP TABLE _neighbours AS
         SELECT
@@ -367,10 +310,6 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
         ORDER BY s.ba_code, s.period_utc
         """)
 
-        # ------------------------------------------------------------------
-        # Gold: the benchmark table. This is the one that holds EIA's own forecast
-        # next to what actually happened, so anyone can check my headline claim.
-        # ------------------------------------------------------------------
         logger.info("Building fact_forecast_accuracy")
         con.execute("""
         CREATE OR REPLACE TABLE fact_forecast_accuracy AS

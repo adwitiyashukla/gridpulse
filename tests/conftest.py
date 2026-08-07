@@ -45,7 +45,6 @@ def synthetic_grid() -> pd.DataFrame:
             "period_utc": periods,
             "ba_code": ba,
             "demand_mwh": demand.round(1),
-            # EIA's forecast: the truth plus a realistic ~2 percent error.
             "demand_forecast_mwh": (demand * (1 + rng.normal(0, 0.021, len(periods)))).round(1),
             "net_generation_mwh": (demand * 1.03).round(1),
             "total_interchange_mwh": rng.normal(0, scale * 0.02, len(periods)).round(1),

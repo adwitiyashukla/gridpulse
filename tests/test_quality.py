@@ -58,7 +58,6 @@ class TestSuiteExecution:
             for r in report.results
             if r.check.severity is Severity.CRITICAL
             and not r.passed
-            # Freshness is expected to fail: the synthetic series ends in 2024.
             and r.check.name != "data_freshness"
         ]
         assert not critical_failures, f"Unexpected critical failures: {critical_failures}"

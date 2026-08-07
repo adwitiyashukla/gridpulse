@@ -93,7 +93,6 @@ def test_rolling_features_do_not_leak_the_present(raw_frame):
 
 def test_degree_days_split_the_temperature_response(raw_frame):
     featured = build_features(frame=raw_frame)
-    # The two limbs are mutually exclusive: never both positive at once.
     both_positive = (featured["heating_degrees"] > 0) & (featured["cooling_degrees"] > 0)
     assert not both_positive.any()
     assert (featured["heating_degrees"] >= 0).all()

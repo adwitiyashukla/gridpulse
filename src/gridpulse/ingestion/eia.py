@@ -1,22 +1,7 @@
-"""Downloading the hourly grid data from the EIA API.
+"""Downloads hourly demand, EIA's own forecast, generation and interchange.
 
-For each region I pull four hourly series from the ``region-data`` endpoint:
-
-==========  ====================================================================
-``D``       Demand in MWh, which is what I am trying to predict
-``DF``      EIA's own day-ahead forecast, which is what I compare against
-``NG``      Net generation in MWh
-``TI``      Power traded with neighbouring regions, in MWh
-==========  ====================================================================
-
-The ``DF`` series is the important one. Instead of making up my own easy baseline,
-I score every model against the forecast the US government actually published and
-actually ran the grid against that day.
-
-Downloads only fetch what is new. Each run looks at the latest timestamp already
-saved and asks for periods after that, so a scheduled run costs a handful of
-requests rather than downloading everything again. Running it twice does not create
-duplicates.
+Only fetches periods newer than what is already saved, and running it twice does
+not create duplicate rows.
 """
 
 from __future__ import annotations
@@ -37,16 +22,12 @@ logger = logging.getLogger(__name__)
 EIA_BASE = "https://api.eia.gov/v2"
 REGION_DATA_ROUTE = f"{EIA_BASE}/electricity/rto/region-data/data/"
 
-# EIA-930 collection began 1 July 2015; requests before this return nothing.
 EIA_EPOCH = "2015-07-01"
 
 BRONZE_SUBDIR = "eia_region"
 _SCHEMA = ["period_utc", "ba_code", "measure_code", "value_mwh", "ingested_at_utc"]
 
 
-# ---------------------------------------------------------------------------
-# Bronze layout helpers
-# ---------------------------------------------------------------------------
 def bronze_path(ba_code: str) -> Path:
     return PATHS.bronze / BRONZE_SUBDIR / f"ba={ba_code}" / "data.parquet"
 
@@ -68,9 +49,6 @@ def watermark(ba_code: str) -> str | None:
     return latest.strftime("%Y-%m-%dT%H")
 
 
-# ---------------------------------------------------------------------------
-# Request construction
-# ---------------------------------------------------------------------------
 def _build_params(
     ba_code: str, start: str, end: str, offset: int, length: int
 ) -> list[tuple[str, str]]:
@@ -103,7 +81,6 @@ def _normalise(records: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(records)
     out = pd.DataFrame(
         {
-            # EIA hourly periods are UTC, formatted YYYY-MM-DDTHH
             "period_utc": pd.to_datetime(df["period"], format="%Y-%m-%dT%H", utc=True, errors="coerce"),
             "ba_code": df["respondent"].astype("string"),
             "measure_code": df["type"].astype("string"),
@@ -115,11 +92,7 @@ def _normalise(records: list[dict]) -> pd.DataFrame:
 
 
 def _merge(existing: pd.DataFrame, fresh: pd.DataFrame) -> pd.DataFrame:
-    """Merge new rows in. If a row already exists, the newest download wins.
-
-    Written this way so that running the download twice does not create duplicate
-    rows, which matters because the scheduled job can overlap with a manual run.
-    """
+    """Merge new rows in. If a row already exists, the newest download wins."""
     if existing.empty:
         combined = fresh
     elif fresh.empty:
@@ -140,9 +113,6 @@ def _merge(existing: pd.DataFrame, fresh: pd.DataFrame) -> pd.DataFrame:
     return combined
 
 
-# ---------------------------------------------------------------------------
-# Async fetch
-# ---------------------------------------------------------------------------
 async def _fetch_ba(
     client: httpx.AsyncClient,
     ba: BalancingAuthority,
@@ -200,7 +170,6 @@ async def _ingest_async(bas: list[BalancingAuthority], full_refresh: bool) -> di
         for ba in bas:
             mark = None if full_refresh else watermark(ba.code)
             if mark:
-                # Re-request the final stored day: EIA revises recent hours in place.
                 start_ts = pd.Timestamp(mark, tz="UTC") - pd.Timedelta(hours=24)
                 start = start_ts.strftime("%Y-%m-%dT%H")
             else:
@@ -218,9 +187,6 @@ async def _ingest_async(bas: list[BalancingAuthority], full_refresh: bool) -> di
     return written
 
 
-# ---------------------------------------------------------------------------
-# Public entry points
-# ---------------------------------------------------------------------------
 def ingest_eia(ba_codes: list[str] | None = None, full_refresh: bool = False) -> dict[str, int]:
     """Extract EIA-930 hourly telemetry into the bronze zone.
 

@@ -1,8 +1,4 @@
-"""Central configuration and the balancing-authority registry.
-
-Every path in the project resolves from :data:`PATHS`, so the same code runs
-identically on a laptop, in CI and on Streamlit Community Cloud.
-"""
+"""Settings, file paths and the list of 12 balancing authorities."""
 
 from __future__ import annotations
 
@@ -10,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:  # optional: absent on minimal app deployments
+try:
     from dotenv import load_dotenv
 
     load_dotenv()
@@ -31,17 +27,10 @@ def _resolve(p: str) -> Path:
     return path if path.is_absolute() else REPO_ROOT / path
 
 
-# ---------------------------------------------------------------------------
-# Balancing authority registry
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class BalancingAuthority:
-    """A US balancing authority and the weather station proxy for its load centre.
-
-    ``latitude``/``longitude`` point at the dominant population centre inside the
-    BA footprint. Electricity demand is overwhelmingly driven by weather where the
-    people are, not by the geographic centroid of the territory.
-    """
+    """A region, with coordinates pointing at its biggest city rather than its
+    geographic centre, since demand follows the weather where people live."""
 
     code: str
     name: str
@@ -87,14 +76,11 @@ def active_bas() -> list[BalancingAuthority]:
     return [BALANCING_AUTHORITIES[c] for c in requested]
 
 
-# ---------------------------------------------------------------------------
-# Measure registry (EIA-930 `type` facet on the region-data endpoint)
-# ---------------------------------------------------------------------------
 EIA_MEASURES: dict[str, str] = {
-    "D":  "demand_mwh",             # actual hourly demand
-    "DF": "demand_forecast_mwh",    # EIA's OWN published day-ahead forecast -> our benchmark
-    "NG": "net_generation_mwh",     # net generation
-    "TI": "total_interchange_mwh",  # net exports to neighbours
+    "D":  "demand_mwh",
+    "DF": "demand_forecast_mwh",
+    "NG": "net_generation_mwh",
+    "TI": "total_interchange_mwh",
 }
 
 WEATHER_VARIABLES: list[str] = [
@@ -108,9 +94,6 @@ WEATHER_VARIABLES: list[str] = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Paths:
     data: Path = field(default_factory=lambda: _resolve(_env("GRIDPULSE_DATA_DIR", "data")))
@@ -143,9 +126,6 @@ class Paths:
 PATHS = Paths()
 
 
-# ---------------------------------------------------------------------------
-# Runtime settings
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Settings:
     eia_api_key: str = field(default_factory=lambda: _env("EIA_API_KEY", ""))
@@ -171,7 +151,6 @@ class Settings:
 
 SETTINGS = Settings()
 
-# Horizon of the forecasting problem: predict the next 24 hours from the prior 7 days.
 FORECAST_HORIZON = 24
 LOOKBACK_HOURS = 168
 QUANTILES = (0.1, 0.5, 0.9)

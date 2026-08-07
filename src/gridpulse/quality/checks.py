@@ -1,17 +1,5 @@
-"""The data quality checks.
-
-Electricity meter data goes wrong in ways that general purpose testing tools do not
-look for. A meter reporting the exact same value for six hours is not steady, it is
-stuck. An hour that disappears every March is not missing data, it is the clocks
-going forward. A negative demand reading does not mean the grid was quiet, it means
-someone got a plus and minus the wrong way round further upstream. Every check
-below is written around one of those specific problems.
-
-Each check is scored against one of six categories: completeness, validity,
-consistency, timeliness, duplicates and accuracy. The results get saved into
-``dq_results`` and ``dq_scorecard`` rather than just printed, so I can look back at
-how data quality changed over time instead of only seeing today's answer.
-"""
+"""Sixteen data quality checks, scored across six categories and saved to the
+warehouse so quality can be tracked over time rather than only printed."""
 
 from __future__ import annotations
 
@@ -28,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class Severity(str, Enum):
-    CRITICAL = "critical"  # fails the pipeline
-    WARNING = "warning"    # logged and tracked, does not block
-    INFO = "info"          # observability only
+    CRITICAL = "critical"
+    WARNING = "warning"
+    INFO = "info"
 
 
 class Dimension(str, Enum):
@@ -44,18 +32,15 @@ class Dimension(str, Enum):
 
 @dataclass(frozen=True)
 class Check:
-    """A single quality assertion.
-
-    ``sql`` must return exactly one row with columns ``failed`` and ``total``.
-    The check passes when ``failed / total <= threshold``.
-    """
+    """One check. Its SQL returns ``failed`` and ``total``, and it passes when
+    ``failed / total`` is within the threshold."""
 
     name: str
     dimension: Dimension
     severity: Severity
     description: str
     sql: str
-    threshold: float = 0.0  # tolerated failure fraction
+    threshold: float = 0.0
 
 
 @dataclass
@@ -117,9 +102,6 @@ class QualityReport:
         )
 
 
-# ---------------------------------------------------------------------------
-# The suite
-# ---------------------------------------------------------------------------
 CHECKS: list[Check] = [
     Check(
         name="demand_not_null",
@@ -127,7 +109,7 @@ CHECKS: list[Check] = [
         severity=Severity.WARNING,
         description="Actual demand is reported for every hour on the spine.",
         sql="SELECT count(*) FILTER (WHERE demand_mwh IS NULL) AS failed, count(*) AS total FROM fact_demand_hourly",
-        threshold=0.02,  # BAs genuinely miss the occasional hour
+        threshold=0.02,
     ),
     Check(
         name="demand_positive",
@@ -316,20 +298,7 @@ CHECKS: list[Check] = [
 
 
 def run_quality_suite(persist: bool = True, database=None) -> QualityReport:
-    """Execute every check and optionally persist the results.
-
-    Parameters
-    ----------
-    persist
-        Write results to ``dq_results`` and rebuild ``dq_scorecard``.
-    database
-        Override the warehouse path. Used by the test suite.
-
-    Returns
-    -------
-    QualityReport
-        ``report.passed`` is False when any CRITICAL check failed.
-    """
+    """Run every check. ``report.passed`` is False if any critical one failed."""
     report = QualityReport()
 
     with connect(database, read_only=not persist) as con:

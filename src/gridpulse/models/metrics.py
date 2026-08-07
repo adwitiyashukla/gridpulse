@@ -1,15 +1,4 @@
-"""The metrics used to score the forecasts, chosen to match how utilities score them.
-
-MAPE is what the power industry normally uses, so it comes first here. Someone who
-runs a grid will say "we run about 2 percent MAPE" and everyone knows what that
-means. But I report MAE and RMSE next to it, because MAPE on its own hides the fact
-that some mistakes cost much more than others. RMSE punishes the big misses, which
-are the ones that force an expensive backup plant to start up, while MAPE treats
-being 500 MW off at 3am the same as being 500 MW off at 5pm in a heatwave.
-
-``skill_vs_benchmark`` turns the accuracy into a percentage improvement over EIA's
-own published forecast, which is the comparison that actually matters here.
-"""
+"""Forecast accuracy metrics: MAPE, sMAPE, MAE, RMSE, R2, pinball loss and skill."""
 
 from __future__ import annotations
 
@@ -61,12 +50,7 @@ def r2(y_true, y_pred) -> float:
 
 
 def peak_hour_mape(frame: pd.DataFrame, actual: str, predicted: str) -> float:
-    """MAPE calculated only on the busiest hour of each day.
-
-    The peak hour is what decides how much generation gets bought, and it is where
-    being wrong costs the most money, so I score it separately from the average
-    across all hours.
-    """
+    """MAPE calculated only on the busiest hour of each day."""
     if frame.empty:
         return float("nan")
     peaks = frame.loc[frame.groupby(frame["period_utc"].dt.date)[actual].idxmax()]

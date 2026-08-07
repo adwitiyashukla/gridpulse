@@ -1,9 +1,4 @@
-"""Shared async HTTP plumbing: bounded concurrency, retries and honest backoff.
-
-Public data APIs rate limit aggressively and fail transiently. Every network call
-in GridPulse funnels through :func:`fetch_json` so retry policy lives in exactly
-one place rather than being copy-pasted per source.
-"""
+"""Shared HTTP helper so the retry and backoff rules live in one place."""
 
 from __future__ import annotations
 
@@ -22,9 +17,6 @@ RATE_LIMIT_STATUS = 429
 MAX_ATTEMPTS = 6
 BASE_BACKOFF = 1.5
 
-# A rate limit is not a transient blip. Open-Meteo and similar public APIs meter
-# by weighted request cost over a rolling window, so the only useful response is
-# to wait meaningfully rather than retry three seconds later.
 RATE_LIMIT_BASE_WAIT = 20.0
 RATE_LIMIT_MAX_WAIT = 90.0
 

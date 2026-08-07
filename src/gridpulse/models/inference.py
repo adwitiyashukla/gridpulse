@@ -1,19 +1,7 @@
-"""Live inference: produce a genuine forward-looking 24-hour forecast.
+"""Makes a real forward-looking 24-hour forecast for the live app.
 
-Backtesting on stored history is easy. Forecasting *tomorrow* is the part that
-usually breaks, because it needs three things stitched together at request time:
-
-1. **Recent observed demand** for the autoregressive lags, from the warehouse and
-   topped up from the live EIA API when the stored copy is stale.
-2. **Future weather**, fetched live from Open-Meteo. This is legitimate: a system
-   operator producing a day-ahead forecast genuinely holds tomorrow's numerical
-   weather prediction.
-3. **A trained model**, loaded from the committed artifacts so no retraining
-   happens on the request path.
-
-When the network is unavailable the module degrades to *replay* mode: it forecasts
-the most recent 24 hours that already exist in the warehouse, so the public site
-still demonstrates the model instead of showing an error page.
+Falls back to replaying the most recent stored day when the network is down, so
+the public site still shows something instead of an error.
 """
 
 from __future__ import annotations
@@ -30,15 +18,15 @@ from gridpulse.features.build import build_features
 
 logger = logging.getLogger(__name__)
 
-HISTORY_HOURS = 400  # comfortably covers the 336-hour deepest lag plus slack
+HISTORY_HOURS = 400
 
 
 @dataclass
 class Forecast:
     ba_code: str
     generated_at_utc: datetime
-    mode: str                      # "live" or "replay"
-    frame: pd.DataFrame            # period_utc, forecast_mwh, p10, p90, [actual_mwh]
+    mode: str
+    frame: pd.DataFrame
     model: str = "gbm"
     notes: list[str] = None
 
@@ -135,9 +123,6 @@ def forecast(ba_code: str, horizon: int = FORECAST_HORIZON, allow_network: bool 
     history["period_utc"] = pd.to_datetime(history["period_utc"], utc=True)
     last_observed = history["period_utc"].max()
 
-    # ------------------------------------------------------------------
-    # Assemble the future rows
-    # ------------------------------------------------------------------
     mode = "replay"
     future = pd.DataFrame()
 
@@ -168,22 +153,14 @@ def forecast(ba_code: str, horizon: int = FORECAST_HORIZON, allow_network: bool 
         combined = pd.concat([history, future], ignore_index=True)
         target_periods = future["period_utc"]
     else:
-        # Replay: hide the final `horizon` actuals from the feature builder and
-        # predict them, so the chart still shows prediction against truth.
         combined = history.copy()
         target_periods = combined["period_utc"].tail(horizon)
         combined.loc[combined["period_utc"].isin(target_periods), "demand_mwh"] = np.nan
 
     combined = combined.sort_values("period_utc").reset_index(drop=True)
 
-    # Calendar attributes are derived here for every row, historical and future
-    # alike, rather than read from storage. Storage and derivation would otherwise
-    # be two sources of truth for the same values.
     combined = _calendar_columns(combined, BALANCING_AUTHORITIES[ba_code].timezone)
 
-    # ------------------------------------------------------------------
-    # Features and prediction
-    # ------------------------------------------------------------------
     featured = build_features(frame=combined, dropna_target=False)
     horizon_rows = featured[featured["period_utc"].isin(target_periods)].copy()
     if horizon_rows.empty:

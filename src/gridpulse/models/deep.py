@@ -1,32 +1,4 @@
-"""The deep learning models, written in PyTorch and built to run on a CPU.
-
-How they are put together
--------------------------
-Both models use the same idea as the Temporal Fusion Transformer, cut down to
-something that trains in minutes on a laptop instead of hours on a GPU:
-
-* An **encoder** reads the last 168 hours of what actually happened: demand,
-  weather, and the time of day and week.
-* A **second branch** reads the next 24 hours of things we already know, which is
-  the weather forecast and the calendar. This is not cheating. A real grid
-  operator making a day-ahead forecast genuinely has tomorrow's weather forecast
-  and knows what day of the week it is. Hiding that would mean solving a harder
-  problem than the real one.
-* A **final layer** combines the two and predicts all 24 hours at once, instead of
-  predicting one hour and feeding it back in. Feeding predictions back in makes
-  small errors pile up.
-
-There are two versions of the encoder: a stacked LSTM, and a small Transformer
-with sinusoidal position encoding. At this amount of data the LSTM usually does
-better. I included the Transformer because it scales better when you have far more
-series, and because I wanted to actually build the attention part rather than just
-read about it.
-
-One thing I had to be careful about is memory. The training windows are never all
-built at once. The dataset keeps one flat float32 array and cuts each window out
-of it only when it is asked for, so memory stays in the tens of megabytes no
-matter how much history there is.
-"""
+"""PyTorch LSTM and Transformer forecasters, sized to train on a laptop CPU."""
 
 from __future__ import annotations
 
@@ -43,7 +15,6 @@ from gridpulse.config import FORECAST_HORIZON, LOOKBACK_HOURS, PATHS
 
 logger = logging.getLogger(__name__)
 
-# Channels observed in the past and fed to the encoder.
 PAST_CHANNELS = [
     "demand_mwh",
     "temperature_2m", "apparent_temperature", "relative_humidity_2m",
@@ -53,7 +24,6 @@ PAST_CHANNELS = [
     "is_business_day", "is_holiday",
 ]
 
-# Channels known in advance for the forecast window.
 FUTURE_CHANNELS = [
     "temperature_2m", "apparent_temperature", "relative_humidity_2m",
     "cloud_cover", "wind_speed_10m",
@@ -64,33 +34,14 @@ FUTURE_CHANNELS = [
 
 TARGET = "demand_mwh"
 
-# Sliding windows at hourly resolution overlap by 167 of 168 input hours, so
-# adjacent samples are almost perfectly redundant. Striding keeps the sample
-# diverse while cutting epoch time by the stride factor. Six hours is a natural
-# choice: it still covers every phase of the daily cycle within a single day.
 TRAIN_STRIDE = 12
 QUICK_TRAIN_STRIDE = 24
 
-# Recurrent layers are inherently sequential: timestep t cannot be computed until
-# t-1 finishes, so cost scales linearly with sequence length and cannot be
-# parallelised away. A 168-step encoder is therefore expensive on a CPU.
-#
-# The lookback window is subsampled every ENCODER_STRIDE hours, giving 56 steps
-# instead of 168. This is not a shortcut: hourly demand is heavily autocorrelated,
-# so consecutive hours carry little independent information, and the retained
-# points still span the full week and every phase of the daily cycle. The recent
-# past is preserved exactly where it matters most through the lag and rolling
-# features already supplied to the gradient-boosted model.
 ENCODER_STRIDE = 3
 
-# Each test window predicts 24 consecutive hours, so a stride of 6 still yields
-# four independent predictions for every hour, which are averaged.
 TEST_STRIDE = 6
 
 
-# ---------------------------------------------------------------------------
-# Dataset
-# ---------------------------------------------------------------------------
 def _torch():
     try:
         import torch
@@ -133,7 +84,6 @@ class WindowDataset:
         split = start + self.lookback
         end = split + self.horizon
         return (
-            # Subsampled: 168 hourly steps become 56 three-hourly steps.
             torch.from_numpy(self.past[start:split:ENCODER_STRIDE]),
             torch.from_numpy(self.future[split:end]),
             torch.from_numpy(self.target[split:end]),
@@ -155,9 +105,6 @@ class ConcatDataset:
         return self.datasets[which][index - int(self.offsets[which])]
 
 
-# ---------------------------------------------------------------------------
-# Models
-# ---------------------------------------------------------------------------
 def build_lstm(n_past: int, n_future: int, hidden: int = 64, layers: int = 1, dropout: float = 0.15):
     torch = _torch()
     nn = torch.nn
@@ -179,9 +126,9 @@ def build_lstm(n_past: int, n_future: int, hidden: int = 64, layers: int = 1, dr
 
         def forward(self, past, future):
             _, (hidden_state, _) = self.encoder(past)
-            context = hidden_state[-1]                                   # (B, hidden)
-            known = self.future_proj(future.flatten(start_dim=1))        # (B, hidden)
-            return self.head(torch.cat([context, known], dim=1))         # (B, horizon)
+            context = hidden_state[-1]
+            known = self.future_proj(future.flatten(start_dim=1))
+            return self.head(torch.cat([context, known], dim=1))
 
     return LSTMForecaster()
 
@@ -225,16 +172,13 @@ def build_transformer(
 
         def forward(self, past, future):
             encoded = self.encoder(self.pos(self.input_proj(past)))
-            context = encoded.mean(dim=1)                                # attention-pooled summary
+            context = encoded.mean(dim=1)
             known = self.future_proj(future.flatten(start_dim=1))
             return self.head(torch.cat([context, known], dim=1))
 
     return TransformerForecaster()
 
 
-# ---------------------------------------------------------------------------
-# Scaling
-# ---------------------------------------------------------------------------
 @dataclass
 class Scaler:
     """Per-channel standardisation. Statistics come from training data only."""
@@ -262,22 +206,13 @@ class Scaler:
 
 @dataclass
 class TargetScaler:
-    """Per-BA target scaling.
-
-    BA demand spans two orders of magnitude (ISNE peaks near 25 GW, PJM near
-    150 GW). Without per-BA normalisation the loss is dominated entirely by the
-    largest system and the small ones never learn.
-    """
+    """Scales demand per region, so the biggest regions do not dominate training."""
 
     stats: dict[str, tuple[float, float]]
 
     @classmethod
     def fit(cls, frame: pd.DataFrame) -> TargetScaler:
-        """Robust per-BA centre and scale (median / IQR).
-
-        See ``gbm.BATargetScaler.fit`` for why mean and standard deviation are
-        unusable here: corrupt readings in the raw feed inflate them without limit.
-        """
+        """Median and IQR per region, so one bad reading cannot skew the scaling."""
         grouped = frame.groupby("ba_code")[TARGET]
         centre = grouped.median()
         spread = (grouped.quantile(0.75) - grouped.quantile(0.25)) / 1.349
@@ -305,18 +240,15 @@ class TargetScaler:
         return cls({k: (v[0], v[1]) for k, v in payload["stats"].items()})
 
 
-# ---------------------------------------------------------------------------
-# Windowing across the full series
-# ---------------------------------------------------------------------------
 @dataclass
 class SeriesBundle:
     """Everything needed to build windows for a single balancing authority."""
 
     ba_code: str
-    past: np.ndarray          # (T, n_past)  scaled
-    future: np.ndarray        # (T, n_future) scaled
-    target_scaled: np.ndarray  # (T,)         scaled
-    target_raw: np.ndarray    # (T,)         MWh
+    past: np.ndarray
+    future: np.ndarray
+    target_scaled: np.ndarray
+    target_raw: np.ndarray
     timestamps: pd.DatetimeIndex
 
 
@@ -346,12 +278,10 @@ def split_windows(
     train_stride: int = TRAIN_STRIDE,
     test_stride: int = TEST_STRIDE,
 ) -> tuple[ConcatDataset, ConcatDataset, list[tuple[SeriesBundle, np.ndarray]]]:
-    """Assign every window to a split by the timestamp of its first forecast hour.
+    """Put each training window into train, validation or test by its date.
 
-    Windows are cut over the *full* contiguous series and only then partitioned, so
-    no usable window is lost at a split boundary. A window is assigned to test only
-    when its entire forecast horizon lies in the test period, which makes the
-    evaluation strictly out-of-sample.
+    A window only counts as test if all 24 forecast hours fall in the test period,
+    so nothing the model saw during training leaks into the score.
     """
     train_sets, valid_sets, test_specs = [], [], []
 
@@ -397,9 +327,6 @@ class _SubsetWindows(WindowDataset):
         return super().__getitem__(int(self.indices[index]))
 
 
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
 @dataclass
 class TrainedDeepModel:
     architecture: str
@@ -513,8 +440,6 @@ def train_deep(
 
     optimiser = torch.optim.AdamW(model.parameters(), lr=2e-3, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, factor=0.5, patience=2)
-    # Huber is deliberately chosen over MSE: load series contain genuine spikes
-    # (heatwaves, storms) and MSE would let a handful of them dominate the gradient.
     criterion = torch.nn.HuberLoss(delta=1.0)
 
     max_epochs = 4 if quick else 15
@@ -573,11 +498,7 @@ def train_deep(
 
 
 def _predict_test(model, test_specs, target_scaler: TargetScaler, batch_size: int = 256) -> pd.DataFrame:
-    """Score every test window and flatten to one row per (BA, timestamp).
-
-    Overlapping windows produce several predictions for the same hour; they are
-    averaged, which is a cheap ensembling effect and smooths window-edge artefacts.
-    """
+    """Predict every test window, averaging where windows overlap the same hour."""
     torch = _torch()
     model.eval()
     rows = []

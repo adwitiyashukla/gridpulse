@@ -1,24 +1,10 @@
-"""The GridPulse pipeline written as Dagster assets.
+"""The GridPulse pipeline as Dagster assets. Run with ``dagster dev -f`` this file.
 
-Dagster is built around *assets*, meaning the tables and files that need to exist,
-rather than around *tasks* that need to run. That fits this project well, because
-every node below really is a table or a file. So the diagram in the Dagster UI is
-an actual picture of the warehouse, not just a schedule.
-
-To run the UI locally::
-
-    dagster dev -f orchestration/dagster_app/definitions.py
-
-There is an equivalent Airflow DAG in ``orchestration/airflow/dags/`` for anyone
-whose team uses Airflow instead.
+Do not add ``from __future__ import annotations`` here. It turns annotations into
+strings, and Dagster reads the annotation on ``context`` to decide what to inject,
+so the assets fail to load with a misleading error.
 """
 
-# NOTE: do not add `from __future__ import annotations` to this file.
-# It turns every type annotation into a string at runtime, and Dagster reads the
-# annotation on the `context` argument to work out what to pass in. With that
-# import it sees the text "AssetExecutionContext" instead of the actual class and
-# throws DagsterInvalidDefinitionError, with an error message that confusingly
-# names the exact type you already gave it.
 
 import sys
 from pathlib import Path
@@ -46,9 +32,6 @@ GROUP_ML = "04_machine_learning"
 GROUP_SERVE = "05_serving"
 
 
-# ---------------------------------------------------------------------------
-# Extract
-# ---------------------------------------------------------------------------
 @asset(
     group_name=GROUP_EXTRACT,
     compute_kind="python",
@@ -89,9 +72,6 @@ def weather_bronze(context: AssetExecutionContext) -> Output[dict]:
     )
 
 
-# ---------------------------------------------------------------------------
-# Warehouse
-# ---------------------------------------------------------------------------
 @asset(
     group_name=GROUP_WAREHOUSE,
     compute_kind="duckdb",
@@ -139,9 +119,6 @@ def dbt_marts(context: AssetExecutionContext) -> Output[str]:
     )
 
 
-# ---------------------------------------------------------------------------
-# Quality
-# ---------------------------------------------------------------------------
 @asset(
     group_name=GROUP_QUALITY,
     compute_kind="python",
@@ -193,9 +170,6 @@ def benchmark_present() -> AssetCheckResult:
     return AssetCheckResult(passed=rows > 1000, metadata={"benchmark_rows": rows})
 
 
-# ---------------------------------------------------------------------------
-# Machine learning
-# ---------------------------------------------------------------------------
 @asset(
     group_name=GROUP_ML,
     compute_kind="python",
@@ -247,9 +221,6 @@ def anomaly_scores(context: AssetExecutionContext) -> Output[dict]:
     )
 
 
-# ---------------------------------------------------------------------------
-# Serving
-# ---------------------------------------------------------------------------
 @asset(
     group_name=GROUP_SERVE,
     compute_kind="python",
@@ -271,9 +242,6 @@ def app_export(context: AssetExecutionContext) -> Output[str]:
     )
 
 
-# ---------------------------------------------------------------------------
-# Jobs and schedules
-# ---------------------------------------------------------------------------
 daily_refresh = define_asset_job(
     name="daily_refresh",
     selection=AssetSelection.all(),
@@ -286,7 +254,6 @@ incremental_refresh = define_asset_job(
     description="Data-only refresh without retraining. Cheap enough to run hourly.",
 )
 
-# EIA publishes on a lag, so 06:00 UTC comfortably captures the previous full day.
 daily_schedule = ScheduleDefinition(
     job=daily_refresh,
     cron_schedule="0 6 * * *",
@@ -294,10 +261,6 @@ daily_schedule = ScheduleDefinition(
     description="Nightly full refresh after EIA publishes the previous day.",
 )
 
-# Left at Dagster's default status (stopped), so it appears in the UI and can be
-# enabled deliberately rather than starting to poll the moment anyone runs the
-# project. Passing default_status=None is not the way to express that: the
-# parameter expects a DefaultScheduleStatus enum and rejects None outright.
 hourly_schedule = ScheduleDefinition(
     job=incremental_refresh,
     cron_schedule="15 * * * *",

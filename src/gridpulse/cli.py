@@ -1,16 +1,5 @@
-"""GridPulse command line interface.
-
-Every stage of the platform is reachable from one entry point::
-
-    gridpulse probe            # validate API credentials and response contracts
-    gridpulse ingest           # extract EIA + weather into bronze
-    gridpulse build            # bronze -> silver -> gold warehouse
-    gridpulse quality          # run the data quality suite
-    gridpulse train            # train and evaluate the full model suite
-    gridpulse anomalies        # fit and score anomaly detectors
-    gridpulse export           # write deployment artifacts for the public app
-    gridpulse all              # the entire pipeline, in order
-"""
+"""One command for every stage: probe, ingest, build, quality, train, anomalies,
+export, or all of them in order."""
 
 from __future__ import annotations
 
@@ -44,9 +33,6 @@ def _timed(label: str, fn: Callable, *args, **kwargs):
     return result
 
 
-# ---------------------------------------------------------------------------
-# Commands
-# ---------------------------------------------------------------------------
 def cmd_probe(args: argparse.Namespace) -> int:
     from gridpulse.config import SETTINGS, active_bas
     from gridpulse.ingestion import probe_eia
@@ -121,15 +107,12 @@ def cmd_export(args: argparse.Namespace) -> int:
 def cmd_all(args: argparse.Namespace) -> int:
     for step in (cmd_ingest, cmd_build, cmd_quality, cmd_train, cmd_anomalies, cmd_export):
         code = step(args)
-        if code != 0 and step is not cmd_quality:  # quality warnings should not halt the run
+        if code != 0 and step is not cmd_quality:
             return code
     _banner("PIPELINE COMPLETE")
     return 0
 
 
-# ---------------------------------------------------------------------------
-# Parser
-# ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gridpulse",
@@ -183,7 +166,6 @@ def main(argv: list[str] | None = None) -> int:
     for flag in ("full_refresh", "rebuild", "quick", "eia_only", "weather_only"):
         setattr(args, flag, getattr(args, flag, False))
 
-    # Normalise the comma-separated BA filter into a list once, here.
     args.bas = [c.strip().upper() for c in args.bas.split(",") if c.strip()] if args.bas else None
     try:
         return args.func(args)

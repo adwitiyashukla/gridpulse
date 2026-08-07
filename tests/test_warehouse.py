@@ -111,7 +111,6 @@ def test_forecast_accuracy_table_computes_error(con):
         FROM fact_forecast_accuracy
     """).df().iloc[0]
     assert row["n"] > 1000
-    # The synthetic benchmark carries roughly 2.1 percent noise by construction.
     assert 0.5 < row["mape"] < 6.0
 
 

@@ -33,8 +33,6 @@ PRETTY = {
 }
 
 
-# P10/P50/P90 are the edges of a prediction interval, not competing point
-# forecasts. Ranking them by MAPE compares things that answer different questions.
 QUANTILE_MODELS = {"gbm_p10", "gbm_p50", "gbm_p90"}
 
 

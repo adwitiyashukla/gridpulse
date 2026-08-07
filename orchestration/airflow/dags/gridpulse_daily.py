@@ -40,7 +40,6 @@ DEFAULT_ARGS = {
     dag_id="gridpulse_daily_refresh",
     description="Extract EIA and weather, rebuild the warehouse, validate, retrain, export.",
     default_args=DEFAULT_ARGS,
-    # 06:00 UTC: EIA has published the previous full day by then.
     schedule="0 6 * * *",
     start_date=datetime(2024, 1, 1),
     catchup=False,

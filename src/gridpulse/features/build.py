@@ -1,33 +1,7 @@
-"""Building the features the models learn from.
+"""Builds the 40 model features: calendar, lags, rolling stats and weather.
 
-I picked these based on what actually makes electricity demand go up and down,
-rather than throwing every available column at the model:
-
-**Calendar features**
-    Hour, weekday and season are encoded as sine and cosine pairs, so that hour 23
-    sits right next to hour 0 instead of looking 23 units away from it. Holidays,
-    and the days either side of them, get their own flags, because office and
-    factory demand drops off a cliff on those days.
-
-**Lags**
-    Demand from 24, 48 and 168 hours ago. The 168 hour one (exactly a week) is the
-    strongest single predictor there is for this problem. Last Tuesday at 3pm looks
-    far more like this Tuesday at 3pm than 3am this morning does.
-
-**Rolling averages**
-    Averages and standard deviations over recent hours, all shifted back by the
-    full 24 hour forecast horizon, so nothing that would only be known after
-    prediction time can sneak in.
-
-**Weather**
-    Temperature, plus heating degrees and cooling degrees kept as separate columns.
-    Demand against temperature is V-shaped rather than a straight line, so splitting
-    it into the cold side and the hot side lets even a simple model pick it up, and
-    helps a tree model find the turning point faster.
-
-On leakage: every feature only uses information that existed before the moment
-being predicted. The one exception is the weather, and that is fine, because a real
-grid operator also has tomorrow's weather forecast in hand.
+Everything derived from past demand is shifted back by the full forecast horizon,
+so no feature can see anything that was not available at prediction time.
 """
 
 from __future__ import annotations
@@ -42,18 +16,8 @@ from gridpulse.warehouse.duck import query
 
 logger = logging.getLogger(__name__)
 
-# Comfort baseline in Celsius. Below it people heat, above it they cool.
 BALANCE_POINT_C = 18.0
 
-# Physically plausible band for demand, expressed as a multiple of each balancing
-# authority's own median. Real system load is remarkably well behaved: even the
-# most extreme heatwave peak sits under twice the annual median, and the deepest
-# overnight trough stays above a third of it. Anything outside this band is a
-# telemetry fault, not weather.
-#
-# This matters more than it looks. The raw EIA feed contains occasional readings
-# several orders of magnitude too large, and a handful of them inflated PJM's
-# standard deviation to 10.7 million MW against a true range near 70,000-165,000 MW.
 DEMAND_PLAUSIBLE_LOWER = 0.2
 DEMAND_PLAUSIBLE_UPPER = 5.0
 
@@ -61,22 +25,17 @@ LAG_HOURS = (24, 25, 26, 48, 72, 168, 336)
 ROLLING_WINDOWS = (24, 168)
 
 FEATURE_COLUMNS: list[str] = [
-    # cyclical calendar
     "hour_sin", "hour_cos", "dow_sin", "dow_cos", "doy_sin", "doy_cos",
-    # categorical calendar
     "is_weekend", "is_holiday", "is_business_day",
     "is_day_before_holiday", "is_day_after_holiday",
-    # autoregressive
     *[f"demand_lag_{h}h" for h in LAG_HOURS],
     *[f"demand_roll_mean_{w}h" for w in ROLLING_WINDOWS],
     *[f"demand_roll_std_{w}h" for w in ROLLING_WINDOWS],
     "demand_same_hour_last_week_delta",
-    # weather
     "temperature_2m", "apparent_temperature", "relative_humidity_2m",
     "dew_point_2m", "cloud_cover", "wind_speed_10m", "shortwave_radiation",
     "heating_degrees", "cooling_degrees", "temp_squared",
     "temp_lag_24h", "temp_change_24h", "temp_roll_mean_24h",
-    # interactions
     "cooling_x_business", "heating_x_business", "cooling_x_hour",
 ]
 
@@ -109,11 +68,7 @@ def load_modelling_frame(ba_codes: list[str] | None = None) -> pd.DataFrame:
 
 
 def flag_implausible_demand(frame: pd.DataFrame, target: str = TARGET) -> pd.Series:
-    """True where demand is impossible relative to the BA's own median.
-
-    Bounds are derived from the median rather than the mean precisely because the
-    outliers being hunted would drag a mean toward themselves and hide.
-    """
+    """True where demand is impossible compared to that region's own median."""
     median = frame.groupby("ba_code")[target].transform("median")
     return (frame[target] < median * DEMAND_PLAUSIBLE_LOWER) | (
         frame[target] > median * DEMAND_PLAUSIBLE_UPPER
@@ -130,7 +85,6 @@ def _engineer_one_ba(frame: pd.DataFrame) -> pd.DataFrame:
     """Build features for a single BA. Assumes the frame is sorted by period."""
     out = frame.sort_values("period_utc").copy()
 
-    # ---- calendar --------------------------------------------------------
     _cyclical(out, out["hour_local"], 24, "hour")
     _cyclical(out, out["day_of_week"], 7, "dow")
     _cyclical(out, pd.to_datetime(out["date_local"]).dt.dayofyear, 365.25, "doy")
@@ -139,24 +93,19 @@ def _engineer_one_ba(frame: pd.DataFrame) -> pd.DataFrame:
                  "is_day_before_holiday", "is_day_after_holiday"):
         out[flag] = out[flag].fillna(False).astype(int)
 
-    # ---- autoregressive --------------------------------------------------
     demand = out[TARGET]
     for lag in LAG_HOURS:
         out[f"demand_lag_{lag}h"] = demand.shift(lag)
 
-    # Rolling windows are shifted by the full horizon: at prediction time for
-    # hour t we only possess observations up to t - FORECAST_HORIZON.
     shifted = demand.shift(FORECAST_HORIZON)
     for window in ROLLING_WINDOWS:
         out[f"demand_roll_mean_{window}h"] = shifted.rolling(window, min_periods=window // 4).mean()
         out[f"demand_roll_std_{window}h"] = shifted.rolling(window, min_periods=window // 4).std()
 
-    # Week-on-week momentum at the same hour of day.
     out["demand_same_hour_last_week_delta"] = (
         out["demand_lag_168h"] - out["demand_lag_336h"]
     )
 
-    # ---- weather ---------------------------------------------------------
     temp = out["temperature_2m"]
     out["heating_degrees"] = (BALANCE_POINT_C - temp).clip(lower=0)
     out["cooling_degrees"] = (temp - BALANCE_POINT_C).clip(lower=0)
@@ -165,11 +114,8 @@ def _engineer_one_ba(frame: pd.DataFrame) -> pd.DataFrame:
     out["temp_change_24h"] = temp - out["temp_lag_24h"]
     out["temp_roll_mean_24h"] = temp.rolling(24, min_periods=6).mean()
 
-    # ---- interactions ----------------------------------------------------
-    # Offices and shops only run their air conditioning on working days.
     out["cooling_x_business"] = out["cooling_degrees"] * out["is_business_day"]
     out["heating_x_business"] = out["heating_degrees"] * out["is_business_day"]
-    # Afternoon heat compounds: the same 35C bites harder at 4pm than at 4am.
     out["cooling_x_hour"] = out["cooling_degrees"] * out["hour_local"]
 
     return out
@@ -180,17 +126,10 @@ def build_features(
     ba_codes: list[str] | None = None,
     dropna_target: bool = True,
 ) -> pd.DataFrame:
-    """Construct the full modelling matrix.
+    """Build the full feature table the models train on.
 
-    Parameters
-    ----------
-    frame
-        Pre-loaded gold data. Loaded from the warehouse when omitted.
-    ba_codes
-        Restrict to these balancing authorities.
-    dropna_target
-        Drop rows with no actual demand. Set False when building an inference
-        frame for future timestamps, where the target is legitimately unknown.
+    Set ``dropna_target=False`` when building features for future hours, where
+    there is no actual demand to compare against yet.
     """
     source = load_modelling_frame(ba_codes) if frame is None else frame
 
@@ -199,7 +138,6 @@ def build_features(
         ignore_index=True,
     )
 
-    # Weather can be sparse at the very edges of the archive/forecast seam.
     weather_columns = [
         "temperature_2m", "apparent_temperature", "relative_humidity_2m",
         "dew_point_2m", "cloud_cover", "wind_speed_10m", "shortwave_radiation",
@@ -209,9 +147,6 @@ def build_features(
         .transform(lambda s: s.interpolate(limit=6, limit_direction="both"))
     )
 
-    # Remove physically impossible readings before any statistic is computed from
-    # them. They are flagged in the warehouse and surfaced by the quality suite;
-    # here they are simply excluded from modelling.
     if dropna_target:
         implausible = flag_implausible_demand(engineered)
         if implausible.any():
@@ -223,7 +158,6 @@ def build_features(
         engineered = engineered[~implausible]
         engineered = engineered.dropna(subset=[TARGET])
 
-    # The deepest lag needs 336 hours of warm-up; those rows can never be complete.
     required = [c for c in FEATURE_COLUMNS if c.startswith("demand_lag")]
     engineered = engineered.dropna(subset=required)
 
@@ -237,11 +171,7 @@ def build_features(
 def chronological_split(
     frame: pd.DataFrame, test_days: int = 90, valid_days: int = 60
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Split strictly by time, never randomly.
-
-    A random split on time-series data lets the model peek at the future through
-    neighbouring rows and produces gorgeous, meaningless validation scores.
-    """
+    """Split by date only, never randomly, so the model cannot see the future."""
     cutoff_test = frame["period_utc"].max() - pd.Timedelta(days=test_days)
     cutoff_valid = cutoff_test - pd.Timedelta(days=valid_days)
 

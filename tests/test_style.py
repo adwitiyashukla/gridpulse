@@ -8,14 +8,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Declared by Unicode codepoint rather than as literals, so this file does not
-# itself contain the characters it forbids. (It did, and failed its own check.)
-#
-#   U+2014 em dash        U+2013 en dash       U+2012 figure dash
-#   U+2015 horizontal bar U+2010 hyphen        U+2011 non-breaking hyphen
-#   U+2212 minus sign
-#
-# The project uses the plain ASCII hyphen everywhere instead.
 FORBIDDEN_DASHES = "".join(
     chr(code) for code in (0x2014, 0x2013, 0x2012, 0x2015, 0x2010, 0x2011, 0x2212)
 )

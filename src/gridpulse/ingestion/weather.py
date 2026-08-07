@@ -1,19 +1,7 @@
-"""Weather extraction from Open-Meteo (no API key required).
+"""Downloads weather from Open-Meteo, no API key needed.
 
-Weather is the dominant exogenous driver of electricity demand: air conditioning
-load in summer and resistive heating in winter produce the characteristic U-shaped
-demand-vs-temperature curve that every load forecaster models.
-
-Two endpoints are stitched together because neither alone is sufficient:
-
-* **ERA5 archive** -- authoritative reanalysis, but lags real time by about 5 days.
-* **Forecast endpoint** -- serves ``past_days`` of recent observations plus up to
-  16 days ahead, closing the archive gap and supplying the *future* covariates the
-  day-ahead model needs at inference time.
-
-Overlapping hours resolve in favour of the archive, which is the more accurate
-source. Getting this seam right is the difference between a model that works in a
-notebook and one that works tomorrow morning.
+Joins the ERA5 archive, which lags about 5 days, to the forecast endpoint, which
+covers the gap and supplies tomorrow's weather. Overlapping hours use the archive.
 """
 
 from __future__ import annotations
@@ -35,13 +23,10 @@ ARCHIVE_ROUTE = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST_ROUTE = "https://api.open-meteo.com/v1/forecast"
 
 BRONZE_SUBDIR = "weather"
-ARCHIVE_LAG_DAYS = 6      # ERA5 publication delay, with a day of safety margin
-FORECAST_PAST_DAYS = 92   # maximum look-back the forecast endpoint allows
-FORECAST_AHEAD_DAYS = 16  # maximum look-ahead
+ARCHIVE_LAG_DAYS = 6
+FORECAST_PAST_DAYS = 92
+FORECAST_AHEAD_DAYS = 16
 
-# Open-Meteo's free tier meters weighted request cost over a rolling window.
-# A multi-year hourly archive pull is a heavy call, so requests are serialised
-# and spaced. This costs about a minute across all BAs and removes 429s entirely.
 INTER_REQUEST_PAUSE = 2.0
 
 
@@ -123,7 +108,6 @@ def _merge(*frames: pd.DataFrame) -> pd.DataFrame:
 
     combined = pd.concat(populated, ignore_index=True)
     combined["period_utc"] = pd.to_datetime(combined["period_utc"], utc=True)
-    # Rank so the archive sorts last and therefore wins `keep="last"`.
     combined["_priority"] = (combined["source"] == "era5_archive").astype(int)
     combined = (
         combined.sort_values(["period_utc", "_priority"])
@@ -136,7 +120,6 @@ def _merge(*frames: pd.DataFrame) -> pd.DataFrame:
 
 
 async def _ingest_async(bas: list[BalancingAuthority], full_refresh: bool) -> dict[str, int]:
-    # Serialised deliberately: see INTER_REQUEST_PAUSE above.
     sem = asyncio.Semaphore(1)
     today = datetime.now(timezone.utc).date()
     archive_end = today - timedelta(days=ARCHIVE_LAG_DAYS)
@@ -156,7 +139,6 @@ async def _ingest_async(bas: list[BalancingAuthority], full_refresh: bool) -> di
                     else SETTINGS.start_date
                 )
 
-            # Sequential rather than gathered, with a pause between calls.
             archive = await _fetch_archive(client, ba, archive_start, archive_end.isoformat(), sem)
             await asyncio.sleep(INTER_REQUEST_PAUSE)
             forecast = await _fetch_forecast(client, ba, sem)

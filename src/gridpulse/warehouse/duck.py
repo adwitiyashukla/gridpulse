@@ -1,10 +1,4 @@
-"""DuckDB connection management.
-
-DuckDB is the warehouse engine because it gives columnar OLAP performance over
-hundreds of millions of rows inside a single embedded file, with no server to run.
-On an 8GB laptop that is the difference between a project that runs and a project
-that swaps. The same SQL ports to Snowflake, BigQuery or Azure Synapse unchanged.
-"""
+"""Opening and closing DuckDB connections, plus a few small query helpers."""
 
 from __future__ import annotations
 
@@ -20,8 +14,6 @@ from gridpulse.config import PATHS
 
 logger = logging.getLogger(__name__)
 
-# Tuned for a constrained laptop: cap DuckDB well below total system RAM so the OS,
-# the Python process and any concurrently running training job all still fit.
 DEFAULT_MEMORY_LIMIT = "2GB"
 DEFAULT_THREADS = 4
 
@@ -41,7 +33,7 @@ def connect(
     try:
         con.execute(f"SET memory_limit='{memory_limit}'")
         con.execute(f"SET threads={threads}")
-        con.execute("SET preserve_insertion_order=false")  # lower peak memory on big sorts
+        con.execute("SET preserve_insertion_order=false")
         yield con
     finally:
         con.close()
