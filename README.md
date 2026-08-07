@@ -5,18 +5,18 @@
 **Day-ahead electricity demand forecasting for the US power grid -
 benchmarked against the EIA's own published forecast.**
 
-### [→ Try the live app](https://gridpulse-ai.streamlit.app)
+### Try it live: [Hugging Face](https://huggingface.co/spaces/adwitiyashukla/gridpulse) or [Streamlit](https://gridpulse-ai.streamlit.app)
 
-[![Streamlit](https://img.shields.io/badge/live%20app-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://gridpulse-ai.streamlit.app)
 [![Hugging Face](https://img.shields.io/badge/live%20app-Hugging%20Face-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/spaces/adwitiyashukla/gridpulse)
+[![Streamlit](https://img.shields.io/badge/live%20app-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://gridpulse-ai.streamlit.app)
 [![CI](https://github.com/adwitiyashukla/gridpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/adwitiyashukla/gridpulse/actions/workflows/ci.yml)
 [![Refresh](https://github.com/adwitiyashukla/gridpulse/actions/workflows/refresh.yml/badge.svg)](https://github.com/adwitiyashukla/gridpulse/actions/workflows/refresh.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[Live app](https://gridpulse-ai.streamlit.app) · [Results](#results) ·
-[Architecture](#architecture) · [Quickstart](#quickstart) ·
-[REST API](#rest-api) · [Engineering log](docs/ENGINEERING_LOG.md)
+[Live app](#live-app) · [Results](#results) · [Architecture](#architecture) ·
+[Quickstart](#quickstart) · [REST API](#rest-api) ·
+[Engineering log](docs/ENGINEERING_LOG.md)
 
 </div>
 
@@ -28,8 +28,8 @@ No install, no signup. The same app is deployed twice, from the same commit:
 
 | Host | URL | How it runs |
 |---|---|---|
-| Streamlit Community Cloud | <https://gridpulse-ai.streamlit.app> | Native Streamlit runtime, `requirements.txt` |
 | Hugging Face Spaces | <https://huggingface.co/spaces/adwitiyashukla/gridpulse> | The repository `Dockerfile`, mirrored automatically by GitHub Actions on every push to `main` |
+| Streamlit Community Cloud | <https://gridpulse-ai.streamlit.app> | Native Streamlit runtime, `requirements.txt` |
 
 Deploying to both is deliberate. The Docker path proves the image is portable
 rather than tied to one host's conventions, and the two deployments are kept in
