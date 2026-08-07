@@ -1,90 +1,103 @@
 # Interview notes
 
-Questions an interviewer is likely to ask about this project, and the honest
-answers. Skim before a conversation.
+Questions I think an interviewer would ask about this project, and my honest
+answers. I read through this before an interview.
 
 ---
 
 **Why DuckDB instead of Postgres, Snowflake or Spark?**
 
-The workload is analytical, single-writer and embarrassingly columnar: scan a few
-hundred million hourly rows, aggregate, join two small dimensions. That is exactly
-DuckDB's shape, and it removes an entire class of operational work - no server, no
-connection pool, no container to keep alive. The SQL is standard enough to port to
-Snowflake or Synapse without rewriting. Spark would be the right answer at a data
-volume this project does not have; choosing it here would be resume-driven design.
+The work here is all reading and aggregating: scan a few hundred million hourly
+rows, group them up, join two small lookup tables. There is only ever one process
+writing. That is exactly what DuckDB is built for, and it means there is no server
+to run, no connection pool, and no container that has to stay alive. The SQL I
+wrote is plain enough to move to Snowflake or Synapse without rewriting it. Spark
+would make sense at a much bigger data size than this, and picking it here would
+just be putting a buzzword on my CV.
 
-**Why one global model instead of one per balancing authority?**
+**Why one model for all the regions instead of one per region?**
 
-BAs share physics. The demand response to temperature in Atlanta genuinely informs
-the same curve in Charlotte, so pooling regularises the smaller territories using
-data from the larger ones. Operationally it is also one artifact to version, deploy
-and monitor rather than twelve, and onboarding a thirteenth BA becomes a data
-change instead of an infrastructure change. `ba_code` enters as a categorical
-feature so the model can still learn system-specific level and shape.
+The regions behave in similar ways. How demand responds to temperature in Atlanta
+really does tell you something about the same curve in Charlotte, so training on
+all of them together lets the bigger regions help the smaller ones. It is also
+simpler to run: one model file to version, deploy and monitor instead of twelve,
+and adding a thirteenth region is just more data rather than more infrastructure.
+The region code goes in as a categorical feature, so the model can still learn
+that each one has its own size and shape.
 
-**How do you know you are not leaking the future?**
+**How do you know the model is not seeing the future?**
 
-Three defences. Splits are strictly chronological, never random. Rolling statistics
-are shifted by the full forecast horizon, so a feature for hour *t* only uses data
-available at *t - 24h*. And `tests/test_features.py` asserts both properties
-directly by reconstructing the expected window from the raw series.
+Three things. The train/test split is always by date, never random. Anything
+calculated from past demand is shifted back by the full 24 hours, so a feature for
+a given hour only uses data that existed 24 hours earlier. And
+`tests/test_features.py` checks both of those directly, by rebuilding what the
+window should be from the raw data and comparing.
 
-The one thing the model *does* see from the future is weather and calendar. That is
-deliberate and defensible: a system operator producing a day-ahead forecast
-genuinely holds tomorrow's numerical weather prediction. Hiding it would model a
-harder problem than the real one.
+The one thing the model does see from the future is the weather forecast and the
+calendar. That is on purpose and I think it is fair: a real grid operator making a
+day-ahead forecast also has tomorrow's weather forecast in front of them. Hiding
+it would mean solving a harder problem than the real one.
 
-**Why is beating the EIA forecast meaningful?**
+**Why does beating the EIA forecast actually mean something?**
 
-Because it is not a strawman. The EIA publishes each BA's own day-ahead forecast in
-the same feed as the actuals - the forecast operators genuinely published and
-operated against. Most portfolio projects invent a naive baseline and beat it. This
-one is scored against production reality.
+Because it is not a baseline I made up to be easy. EIA publishes each region's own
+day-ahead forecast in the same dataset as the real values, and that is the forecast
+grid operators actually published and actually used. Most portfolio projects invent
+a simple baseline and beat that. This one is scored against what really happened in
+production.
 
-Caveat worth volunteering: the EIA figure is submitted ahead of time under
-operational constraints, while this model is fit with hindsight over the full
-history. It is a fair accuracy comparison, not a claim of operational superiority.
+The caveat I would raise myself: EIA had to submit their forecast in advance, under
+real deadlines, while my model is trained on the full history. So it is a fair
+comparison of accuracy, but it does not prove my model would do better in real
+operations.
 
-**What breaks first at 100× the data?**
+**What breaks first if the data gets 100 times bigger?**
 
-The feature-engineering step, which currently materialises the full frame in
-pandas. The fix is to push lag and rolling computation into DuckDB window
-functions, which keeps it set-based and out of Python memory. Ingestion already
-scales - it is async, paginated and watermarked. The warehouse scales as far as
-DuckDB does, and past that the SQL moves to Snowflake or Synapse largely unchanged.
+The feature engineering step, because right now it builds the whole table in
+pandas memory. The fix would be to move the lag and rolling calculations into
+DuckDB window functions so they stay in SQL and never load into Python. The
+download step already scales, since it is async, paginated and remembers where it
+got to. The warehouse scales as far as DuckDB does, and beyond that the SQL moves
+to Snowflake or Synapse mostly unchanged.
 
-**How would you productionise this properly?**
+**How would you make this properly production ready?**
 
-Replace the committed DuckDB artifact with object storage (ADLS Gen2 or S3) and a
-served warehouse. Move Dagster from local to Dagster Cloud or a Kubernetes
-deployment. Add drift monitoring on feature distributions and prediction residuals,
-with automated retraining triggers rather than a fixed weekly cron. Put the model
-artifacts in a proper registry with staged promotion instead of a git directory.
-Add alerting on the quality checks rather than only failing the run.
+Move the DuckDB file out of the repo and into object storage like S3 or ADLS, with
+a real served warehouse behind it. Run Dagster on Dagster Cloud or Kubernetes
+instead of locally. Add monitoring that watches whether the input data or the
+prediction errors are drifting, and retrain when they do instead of just retraining
+every Monday. Put the trained models in a proper model registry with staging and
+promotion, instead of a folder in Git. And make the quality checks send an alert,
+not just fail the run.
 
-**Why flag bad data instead of dropping it?**
+**Why flag bad data instead of deleting it?**
 
-Because the flag is the finding. A meter reporting an identical value for six
-straight hours is not stable, it is stuck - and that is an operational fault
-somebody needs to know about. Dropping the row destroys the only evidence. The
-warehouse keeps every reading with its flags; the modelling layer decides
-separately what to exclude.
+Because the flag is the useful part. A meter reporting the exact same value for six
+hours in a row is not steady, it is stuck, and that is a real fault somebody should
+know about. If I delete the row I also delete the only evidence it happened. So the
+warehouse keeps every reading with its flags attached, and the modelling step
+decides separately what to leave out.
 
 **What is the weakest part of this project?**
 
-The deep models are unlikely to beat LightGBM at this data scale, and that is worth
-saying out loud rather than hiding. With twelve series and a few years of history,
-gradient boosting on well-designed features is genuinely the right tool; sequence
-models start to win with many more series or richer exogenous inputs. They are
-included because the architecture question is real, and the comparison is more
-honest than only shipping the model that won.
+The prediction bands. The P10-P90 range should contain 80% of the real values and
+only contains about 58%, so the model is more confident than it should be. The fix
+is conformal calibration and it is the next thing on my list.
 
-**How is the LLM agent kept safe?**
+After that, the deep learning models. They were never likely to beat LightGBM at
+this data size, and I would rather say that than hide it. With twelve series and a
+few years of data, gradient boosting on good features is genuinely the right tool.
+LSTMs and Transformers start to win when you have many more series or a lot more
+outside data. I kept them in because comparing the approaches was the point, and
+showing only the winner would be less honest.
 
-Six layers, applied before execution: a read-only connection, a single-statement
-rule, a SELECT/WITH-only prefix check, a DDL/DML keyword blocklist evaluated after
-comment stripping, a table allowlist that blocks the internal catalogs, and an
-enforced row cap. The generated SQL is always shown to the user, because an answer
-nobody can audit is an answer nobody should trust. `tests/test_sql_guard.py` covers
-the attack cases including stacked statements and comment-hidden payloads.
+**How do you stop the LLM doing something dangerous?**
+
+Six checks, all before anything runs: the database connection is read-only, only
+one statement is allowed, the query has to start with SELECT or WITH, there is a
+blocklist of dangerous keywords that runs after comments are stripped out, there
+is a list of allowed tables that blocks the internal system tables, and there is a
+row limit. The app always shows you the SQL it generated, because an answer you
+cannot check is an answer you should not trust. `tests/test_sql_guard.py` covers
+the attacks I tested, including stacking two statements together and hiding
+keywords inside comments.

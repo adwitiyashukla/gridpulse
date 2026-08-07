@@ -1,24 +1,26 @@
-"""Bronze -> silver -> gold transformation, executed inside DuckDB.
+"""Turning raw downloads into the warehouse: bronze, then silver, then gold.
 
-The medallion layers each have one job:
+Each of the three layers has one job:
 
 **Bronze**
-    Immutable raw extract. Long/narrow, one row per (period, BA, measure). Never
-    edited, only appended to, so any downstream bug is always reproducible.
+    The raw data exactly as it was downloaded, one row per region per hour per
+    measurement. I never edit it, only add to it, so if something goes wrong later
+    I can always go back and reproduce it.
 
 **Silver**
-    Conformed and cleaned. Measures pivot to columns, weather joins on, an explicit
-    hourly spine exposes gaps, local civil time is derived per BA, and suspect
-    values are *flagged rather than deleted*. Destroying a bad reading destroys the
-    evidence that a meter was broken; utilities need that evidence.
+    Cleaned up and reshaped. The measurements become columns, the weather gets
+    joined on, a full list of every hour makes any missing hours obvious, local
+    time is worked out for each region, and anything suspicious is *flagged rather
+    than deleted*. Deleting a bad reading also deletes the proof that a meter was
+    broken, and that proof is the useful part.
 
 **Gold**
-    A Kimball star schema the BI and ML layers consume: conformed dimensions around
-    ``fact_demand_hourly``, plus a purpose-built accuracy fact that scores EIA's own
-    published day-ahead forecast against what actually happened.
+    A star schema, which is what the dashboard and the models read from. It has
+    lookup tables around `fact_demand_hourly`, plus a separate table that scores
+    EIA's own published forecast against what actually happened.
 
-All heavy lifting is set-based SQL rather than row-wise pandas, so peak memory stays
-flat regardless of history length.
+All the heavy work is done in SQL over whole tables at once, rather than looping
+through rows in pandas, so memory stays flat no matter how much history there is.
 """
 
 from __future__ import annotations
@@ -38,17 +40,17 @@ MIN_PLAUSIBLE_MWH = 1.0
 # Hour-on-hour swings beyond this are almost always bad data, not real load.
 MAX_HOURLY_RAMP_PCT = 40.0
 
-# Despiking is done against a centred rolling median rather than the immediate
-# neighbours. Neighbour comparison is fragile in two ways that both bit in
-# practice: it needs a threshold low enough to catch a one-sided excursion yet
-# high enough to spare genuine ramps, and it cannot classify the first or last
-# row of a series at all -- which is exactly where preliminary, unsettled data
-# lives.
+# I find spikes by comparing each point against a rolling median centred on it,
+# rather than against the point before and after. Comparing to neighbours broke in
+# two ways when I tried it. It needs a threshold low enough to catch a spike that
+# is only extreme on one side, but high enough not to flag genuine fast changes.
+# And it cannot judge the very first or very last row at all, which is exactly
+# where the newest and least reliable data sits.
 #
-# A rolling median has neither problem. Aggregate demand is smooth relative to a
-# 5-hour window, so a real load profile never departs far from its local median,
-# while an isolated excursion departs sharply regardless of which side it lands on.
-SPIKE_WINDOW_HOURS = 2      # rows either side, giving a 5-hour centred window
+# A rolling median has neither problem. Total demand moves smoothly over five
+# hours, so a normal day never strays far from its local median, while a single
+# bad reading stands out no matter which side it falls on.
+SPIKE_WINDOW_HOURS = 2      # rows either side, so a 5 hour window centred on each point
 SPIKE_DEVIATION_PCT = 20.0
 
 
@@ -115,7 +117,7 @@ def _dim_date_frame(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
 
 
 def build_warehouse(rebuild: bool = False) -> dict[str, int]:
-    """Materialise the silver and gold layers from bronze Parquet.
+    """Build the silver and gold layers from the raw Parquet files in bronze.
 
     Parameters
     ----------
@@ -366,8 +368,8 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
         """)
 
         # ------------------------------------------------------------------
-        # Gold: the benchmark fact. This is the table that makes the project's
-        # headline claim falsifiable.
+        # Gold: the benchmark table. This is the one that holds EIA's own forecast
+        # next to what actually happened, so anyone can check my headline claim.
         # ------------------------------------------------------------------
         logger.info("Building fact_forecast_accuracy")
         con.execute("""

@@ -1,15 +1,16 @@
-"""Declarative data quality suite for grid telemetry.
+"""The data quality checks.
 
-Utility interval data fails in ways generic frameworks do not anticipate. A meter
-that reports the identical value for six straight hours is not stable, it is stuck.
-An hour that vanishes every March is not missing data, it is a daylight saving
-transition. A negative demand reading is not a quiet grid, it is a sign convention
-error upstream. Each check below encodes one of those domain failure modes.
+Electricity meter data goes wrong in ways that general purpose testing tools do not
+look for. A meter reporting the exact same value for six hours is not steady, it is
+stuck. An hour that disappears every March is not missing data, it is the clocks
+going forward. A negative demand reading does not mean the grid was quiet, it means
+someone got a plus and minus the wrong way round further upstream. Every check
+below is written around one of those specific problems.
 
-Every check is scored against the six classical quality dimensions -- completeness,
-validity, consistency, timeliness, uniqueness and accuracy -- and results are
-persisted to ``dq_results`` and ``dq_scorecard`` so quality is tracked as a time
-series rather than a one-off print statement.
+Each check is scored against one of six categories: completeness, validity,
+consistency, timeliness, duplicates and accuracy. The results get saved into
+``dq_results`` and ``dq_scorecard`` rather than just printed, so I can look back at
+how data quality changed over time instead of only seeing today's answer.
 """
 
 from __future__ import annotations

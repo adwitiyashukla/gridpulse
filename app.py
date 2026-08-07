@@ -734,17 +734,18 @@ with tabs[6]:
         """
 ### The problem
 
-A balancing authority must commit generation for tomorrow **today**. Over-forecast
-and you burn fuel producing electricity nobody uses. Under-forecast and you buy on
-the spot market at penalty prices, or shed load. A single percentage point of
-forecast error across a large system is worth millions of dollars a year.
+Electricity cannot really be stored at grid scale, so the companies that run the
+grid have to decide today how much power to generate tomorrow. Guess too high and
+they burn fuel making electricity nobody uses. Guess too low and they have to buy
+the shortfall at emergency prices, or cut power to customers. On a large grid,
+being off by one percent costs millions of dollars a year.
 
-### The benchmark
+### What I compare against
 
-The EIA publishes each balancing authority's **own day-ahead demand forecast**
-alongside what actually happened. That makes this project falsifiable: rather than
-inventing a weak baseline, every model here is scored against the forecast that
-grid operators genuinely published and operated against.
+The EIA publishes each region's own day-ahead forecast next to what actually
+happened. So instead of making up an easy baseline, every model here is scored
+against the forecast grid operators really published and really used, which means
+anyone can check whether these results hold up.
 
 ### The pipeline
 """
@@ -756,8 +757,8 @@ EIA-930 API v2  ─┐
                  ├─► BRONZE (Parquet, partitioned, immutable, watermarked)
 Open-Meteo      ─┘        │
                           ▼
-                    SILVER (conformed: measures pivoted, weather joined,
-                            hourly spine, local civil time, quality flags)
+                    SILVER (cleaned: measures become columns, weather joined,
+                            every hour listed, local time, quality flags)
                           │
                           ▼
                     GOLD (DuckDB star schema)
@@ -767,8 +768,8 @@ Open-Meteo      ─┘        │
                           │
         ┌─────────────────┼──────────────────┬───────────────────┐
         ▼                 ▼                  ▼                   ▼
-  13 quality checks   Feature store    Anomaly detection    Agentic SQL
-  (6 dimensions)      (40 features)    (3-detector vote)    (guarded LLM)
+  16 quality checks   Features         Anomaly detection    SQL agent
+  (6 categories)      (40 of them)     (3 detectors vote)   (guarded LLM)
                           │
                           ▼
               LightGBM · LSTM · Transformer · Ensemble
@@ -781,40 +782,42 @@ Open-Meteo      ─┘        │
 
     st.markdown(
         """
-### Engineering decisions worth defending
+### Why I built it this way
 
-**DuckDB over Postgres or Spark.** Columnar OLAP performance over hundreds of
-millions of rows inside a single embedded file, with no server. On constrained
-hardware this is the difference between a pipeline that runs and one that swaps.
-The SQL ports to Snowflake, BigQuery or Synapse unchanged.
+Why DuckDB and not Postgres or Spark. It handles hundreds of millions of rows
+inside a single file with no server to run. I built this on a laptop with 8 GB of
+RAM, and that was the difference between a pipeline that finishes and one that runs
+out of memory. The SQL would still run on Snowflake or BigQuery unchanged.
 
-**One global model, not one per balancing authority.** BAs share physics, so
-pooling regularises the smaller territories using the larger ones. It also means
-one artifact to deploy, version and monitor rather than twelve.
+Why one model for all 12 regions. The regions behave similarly, so training
+together lets the bigger ones help the smaller ones. It also means one model file
+to deploy and monitor instead of twelve.
 
-**Flag bad data, never delete it.** A frozen meter reading is evidence that a meter
-was broken. Silently dropping it destroys the only record that anything went wrong.
+Why I flag bad data instead of deleting it. A meter stuck on the same value is
+proof that the meter broke. Quietly dropping that row also drops the only record
+that anything went wrong.
 
-**Chronological splits only.** A random split on time-series data leaks the future
-through neighbouring rows and produces beautiful, meaningless validation scores.
+Why I only split by date. If you split time-series data randomly, rows from the
+future sit next to rows from the past and the model effectively sees answers it
+should not have. The scores look great and mean nothing.
 
-**Known future covariates are not leakage.** Tomorrow's weather forecast and
-tomorrow's calendar are genuinely in an operator's hands when they forecast. Hiding
-them would model a harder problem than the real one.
+Why using tomorrow's weather is not cheating. A real grid operator also has
+tomorrow's weather forecast and knows what day of the week it is. Leaving it out
+would mean solving a harder problem than the real one.
 
-### Stack
+### What it is built with
 
-| Layer | Technology |
+| Part | Tools |
 |---|---|
-| Extraction | Python, `httpx` async, watermarked incremental loads |
-| Storage | Parquet medallion, DuckDB warehouse |
-| Transformation | SQL, dbt |
-| Orchestration | Dagster assets, mirrored Airflow DAG, GitHub Actions cron |
-| Quality | 13 declarative checks across 6 quality dimensions |
-| ML | LightGBM (quantile), PyTorch LSTM and Transformer |
-| Tracking | MLflow |
+| Downloading data | Python, `httpx` async, only fetching what is new |
+| Storage | Parquet in bronze/silver/gold, DuckDB warehouse |
+| Transformations | SQL and dbt |
+| Scheduling | Dagster assets, the same pipeline as an Airflow DAG, GitHub Actions |
+| Quality | 16 checks across 6 categories |
+| Machine learning | LightGBM with quantiles, PyTorch LSTM and Transformer |
+| Experiment tracking | MLflow |
 | Serving | FastAPI, Streamlit |
-| GenAI | Groq LLM with a guarded text-to-SQL layer |
+| AI features | Groq LLM writing SQL, with guardrails |
 """
     )
 

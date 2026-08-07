@@ -1,31 +1,32 @@
-# dbt project: GridPulse analytics marts
+# The dbt part of GridPulse
 
-The Python pipeline (`gridpulse build`) materialises the gold star schema.
-dbt sits on top of it and builds the analytics marts the dashboard and BI layer
-consume, with tests and generated documentation.
+The Python pipeline (`gridpulse build`) creates the gold star schema. dbt then sits
+on top of that and builds the summary tables the dashboard uses, along with tests
+and documentation it generates itself.
 
-## Run
+## Running it
 
 ```bash
 cd dbt/gridpulse
 dbt deps --profiles-dir .
-dbt build --profiles-dir .        # run models + tests
+dbt build --profiles-dir .        # build the models and run the tests
 dbt docs generate --profiles-dir .
-dbt docs serve --profiles-dir .   # interactive lineage graph
+dbt docs serve --profiles-dir .   # opens a browsable diagram of how everything connects
 ```
 
-## Models
+## The models
 
-| Model | Grain | Purpose |
+| Model | One row per | What it gives you |
 |---|---|---|
-| `stg_demand_hourly` | BA × hour | Cleaned hourly demand with degree days and day type |
-| `stg_forecast_accuracy` | BA × hour | EIA's own forecast error per hour |
-| `mart_daily_demand` | BA × day | Daily totals, peak, load factor, degree days |
-| `mart_load_profile` | BA × season × day type × hour | Average load shape, normalised |
-| `mart_forecast_scorecard` | BA × month | EIA accuracy and directional bias |
-| `mart_temperature_response` | BA × day type × 2°C bin | Empirical demand/temperature curve |
-| `mart_peak_events` | BA × top 25 days | The days capacity planning is built around |
+| `stg_demand_hourly` | region and hour | Cleaned hourly demand, plus degree days and what kind of day it was |
+| `stg_forecast_accuracy` | region and hour | How far off EIA's own forecast was, hour by hour |
+| `mart_daily_demand` | region and day | Daily total, daily peak, load factor and degree days |
+| `mart_load_profile` | region, season, day type and hour | The average shape of a day, scaled so regions can be compared |
+| `mart_forecast_scorecard` | region and month | How accurate EIA is, and whether they tend to guess high or low |
+| `mart_temperature_response` | region, day type and 2°C band | The actual measured curve between temperature and demand |
+| `mart_peak_events` | region, top 25 days | The busiest days, which are the ones capacity planning is based on |
 
-Tests cover not-null and uniqueness on every grain, referential integrity to
-`dim_ba`, accepted ranges on load factor, peak hour and percentage columns, and
-accepted values on categorical fields.
+The tests check that no key columns are null and that there is only one row per
+key, that every region code matches a real region in `dim_ba`, that things like
+load factor and peak hour fall in sensible ranges, and that the text columns only
+contain values I expect.

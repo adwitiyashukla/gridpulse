@@ -1,245 +1,249 @@
-# Engineering log
+# Bugs I hit while building this
 
-Every non-trivial bug found while building GridPulse, what caused it, and how it
-was fixed. Kept in the repository deliberately: the failures are more instructive
-than the finished code, and several of them are the kind that pass silently.
-
----
-
-## 1. Timezone crash when building the hourly spine
-
-**Symptom.** `AssertionError: Inferred time zone not equal to passed time zone`
-from deep inside pandas, on every warehouse build.
-
-**Cause.** DuckDB's `.df()` returns timezone-aware timestamps. Passing those to
-`pd.date_range` *together with* `tz="UTC"` trips a consistency assertion, because
-pandas will not accept a timezone declaration alongside endpoints that already
-carry one.
-
-**Fix.** Normalise endpoints through a small `_as_utc()` helper instead of
-re-declaring the timezone. `warehouse/build.py`.
+Every real bug I ran into while building GridPulse, what was causing it, and how I
+fixed it. I kept this in the repo on purpose. I learned more from these than from
+the parts that worked first time, and a few of them were the kind that break
+things without showing any error.
 
 ---
 
-## 2. Reported sample size did not match the scored sample
+## 1. Timezone crash when building the hourly time series
 
-**Symptom.** A metrics test failed with `assert 3 == 2`.
+**What happened.** Every warehouse build died with
+`AssertionError: Inferred time zone not equal to passed time zone`, thrown from
+somewhere inside pandas.
 
-**Cause.** `evaluate_forecast` counted every finite actual for `n_obs`, while the
-metrics themselves were computed only over rows that were finite **and positive**.
-Every number in the bundle described a different sample than the one advertised.
+**Why.** When DuckDB hands data back to pandas, the timestamps already have a
+timezone attached. I was passing those timestamps to `pd.date_range` and *also*
+telling it `tz="UTC"`. Pandas will not accept a timezone on top of values that
+already have one, so it refused.
 
-**Fix.** Derive `n_obs` from the same cleaning function the metrics use. The test
-was right and the code was wrong. `models/metrics.py`.
+**Fix.** I wrote a small `_as_utc()` helper to convert the timestamps once,
+instead of declaring the timezone a second time. In `warehouse/build.py`.
+
+---
+
+## 2. The sample size I reported was not the sample I actually scored
+
+**What happened.** A test failed with `assert 3 == 2`.
+
+**Why.** My `evaluate_forecast` function counted every valid number when it
+reported how many observations it used, but it calculated the actual metrics only
+on rows that were valid **and** above zero. So every metric was describing a
+smaller set of rows than the number printed next to it.
+
+**Fix.** I made the row count come from the same filtering function the metrics
+use, so they can never disagree. Worth saying: the test was right and my code was
+wrong. In `models/metrics.py`.
 
 ---
 
 ## 3. A test that was wrong about its own data
 
-**Symptom.** `test_hourly_spine_is_continuous` reported 12 gaps in a series that
-was demonstrably continuous.
+**What happened.** `test_hourly_spine_is_continuous` said there were 12 gaps in a
+series that clearly had no gaps.
 
-**Cause.** `date_diff('hour', ...)` is evaluated against the session timezone, so
-daylight-saving transitions were counted as discontinuities in a UTC series that
-had none.
+**Why.** I was using `date_diff('hour', ...)`, which DuckDB works out using the
+session timezone. So when clocks changed for daylight saving, the test counted
+those as missing hours, even though the data was stored in UTC and had none.
 
-**Fix.** Measure elapsed epoch seconds, which no calendar rule can distort. The
-lesson: when a test fails, confirm which side is wrong before changing either.
-`tests/test_warehouse.py`.
-
----
-
-## 4. A CLI flag that swallowed its own subcommand
-
-**Symptom.** `gridpulse --bas PJM ingest` failed with "the following arguments are
-required: command".
-
-**Cause.** `nargs="*"` is greedy. argparse consumed `ingest` as a second balancing
-authority code and then found no subcommand.
-
-**Fix.** Comma-separated values (`--bas PJM,ERCO`), which have unambiguous
-boundaries. `cli.py`.
+**Fix.** I measured the difference in epoch seconds instead, which no calendar
+rule can mess with. The lesson I took from this: when a test fails, check which
+side is actually wrong before you change either one. In `tests/test_warehouse.py`.
 
 ---
 
-## 5. Rate limiting handled as though it were a transient error
+## 4. A command line flag that ate its own subcommand
 
-**Symptom.** Weather ingestion completed for 8 of 12 balancing authorities, then
-died with `HTTP 429` after five retries spanning about 14 seconds.
+**What happened.** Running `gridpulse --bas PJM ingest` failed with
+"the following arguments are required: command".
 
-**Cause.** One retry policy for all failures. A 503 clears in seconds; a rate
-limit does not. Backing off 2 seconds against a rate limiter is just a slower way
-of being refused.
+**Why.** I had set `nargs="*"` on the `--bas` flag, which makes argparse keep
+taking values until it runs out. It read `ingest` as a second region code, and
+then complained there was no command.
 
-**Fix.** Treat 429 as its own class: honour the `Retry-After` header, otherwise
-back off 20 to 90 seconds. Weather requests were also serialised with a 2-second
-pause rather than fired concurrently, which removed the 429s at source.
-`ingestion/http.py`, `ingestion/weather.py`.
+**Fix.** I switched to comma separated values (`--bas PJM,ERCO`), so there is no
+question where the list ends. In `cli.py`.
 
 ---
 
-## 6. Deep models that would have run for hours
+## 5. I treated rate limiting like a normal error
 
-**Symptom.** LSTM training at 4 to 6 minutes per epoch, implying well over an hour
-per model on CPU.
+**What happened.** Weather downloads finished for 8 of the 12 regions and then
+died with `HTTP 429`, after five retries that together took about 14 seconds.
 
-**Cause.** Two compounding issues. Roughly 795,000 sliding windows where each
-shares 167 of its 168 input hours with its neighbour, so nearly all of that
-sampling was redundant. And a 168-step recurrent encoder, whose cost is linear in
-sequence length and cannot be parallelised because step *t* depends on *t-1*.
+**Why.** I had one retry rule for every kind of failure. A server error usually
+clears in a couple of seconds, but a rate limit does not. Waiting 2 seconds and
+asking again is just a slower way of getting refused.
 
-**Fix.** Stride the training windows (keeping one in twelve), and subsample the
-encoder input to every third hour, giving 56 steps instead of 168. Hourly demand
-is heavily autocorrelated, so the discarded points carried little independent
-information. Combined effect: about 13x faster, epochs down to roughly 20 seconds.
-`models/deep.py`.
+**Fix.** I gave 429 its own handling: use the `Retry-After` header if the server
+sends one, otherwise wait between 20 and 90 seconds. I also stopped firing the
+weather requests all at once and sent them one at a time with a 2 second gap,
+which stopped the 429s happening at all. In `ingestion/http.py` and
+`ingestion/weather.py`.
 
 ---
 
-## 7. Forty corrupt readings that destroyed the model
+## 6. The deep learning models would have taken hours to train
 
-**Symptom.** LightGBM early-stopped after **6 trees**. Final MAPE 53.9% with an R²
-of -131. Feature importances ranked `doy_sin` and `cloud_cover` above
-`demand_lag_24h`, which is nonsense for load forecasting.
+**What happened.** The LSTM was taking 4 to 6 minutes per epoch, which works out
+to well over an hour per model on my laptop's CPU.
 
-**Diagnosis.** Rather than guessing, a diagnostic script dumped the fitted scaler
-statistics:
+**Why.** Two things at once. First, I was generating about 795,000 training
+windows, and each window shared 167 of its 168 hours with the next one, so nearly
+all of that was the same data over and over. Second, the model had to step through
+all 168 hours one at a time, and an LSTM cannot do those steps in parallel because
+each step needs the answer from the one before it.
+
+**Fix.** I kept only every twelfth training window, and fed the model every third
+hour instead of every hour, so 168 steps became 56. Electricity demand changes
+slowly from hour to hour, so the hours I dropped were not telling the model much
+that the remaining ones did not. Together this made training about 13 times
+faster, and an epoch dropped to roughly 20 seconds. In `models/deep.py`.
+
+---
+
+## 7. Forty bad readings that wrecked the model
+
+**What happened.** LightGBM stopped training after only **6 trees**. The final
+error was 53.9% MAPE with an R² of -131, which is worse than guessing. It also
+thought the day of year and cloud cover mattered more than yesterday's demand at
+the same hour, which makes no sense for predicting electricity demand.
+
+**How I found it.** Instead of guessing, I wrote a script to print the scaling
+numbers the model had calculated:
 
 ```
-PJM   mean 158,481 MW    std 10,739,790 MW    <- std is 10.7 million
-TVA   mean  18,514 MW    std     56,844 MW    <- std is 3x the mean
+PJM   mean 158,481 MW    std 10,739,790 MW    <- 10.7 million
+TVA   mean  18,514 MW    std     56,844 MW    <- 3x the mean
 ```
 
-PJM's true range is roughly 70,000 to 165,000 MW. Per-balancing-authority error
-confirmed it: **PJM 583% MAPE, TVA 20%, and every other BA between 2.9% and 7.3%.**
-Exactly the two systems with corrupted statistics. Median absolute percentage error
-was 4.2% against a mean of 53.9%, and the worst 1% of rows carried 47.5% of all
-error.
+PJM's demand is really somewhere between about 70,000 and 165,000 MW, so a
+standard deviation of 10.7 million is impossible. Then I checked the error for each
+region separately: **PJM was 583%, TVA was 20%, and every other region was between
+2.9% and 7.3%.** Exactly the two regions with broken numbers. The median error was
+4.2% while the mean was 53.9%, and the worst 1% of rows accounted for 47.5% of all
+the error, which is the signature of a few extreme values rather than a bad model.
 
-**Cause.** Out of 797,677 hourly readings, **40** were physically impossible. The
-target was normalised per balancing authority using mean and standard deviation,
-both of which have a breakdown point of zero: a single arbitrary value moves them
-without limit. Those 40 rows corrupted the normalisation, which corrupted every
-prediction for the affected systems.
+**Why.** Out of 797,677 hourly readings, **40** were physically impossible values.
+I was scaling the demand for each region using the mean and standard deviation,
+and both of those can be dragged anywhere by a single crazy value. Those 40 rows
+broke the scaling, and the broken scaling broke every prediction for those regions.
 
 **Fix.**
-- Both target scalers moved to **median and IQR**, which outliers cannot move.
-- Implausible readings excluded from modelling (outside 0.2x to 5x the BA median).
-- Two new **critical** quality checks: magnitude plausibility, and a dispersion
-  check that fails when any BA's standard deviation exceeds its mean.
 
-**Result.** MAPE 53.9% to **3.68%**, R² -131 to **0.994**.
+- Switched both scalers to **median and IQR**, which extreme values cannot drag around.
+- Excluded impossible readings from training (anything outside 0.2x to 5x that region's median).
+- Added two new **critical** quality checks: one for values that are physically impossible, and one that fails if any region's standard deviation is bigger than its mean.
 
-**The real lesson.** The quality suite had 13 checks and passed 13 of 13. It
-verified that demand was not *below* zero, and never considered that it might be
-absurdly *large*. A quality suite only tests the failures its author imagined.
+**Result.** MAPE went from 53.9% to **3.68%**, and R² from -131 to **0.994**.
+
+**What I actually learned.** My quality suite had 13 checks and all 13 passed. It
+checked that demand was never *below* zero, and it never occurred to me to check
+whether demand might be far too *big*. A set of quality checks can only catch the
+problems whoever wrote them thought of.
 
 ---
 
-## 8. Charts still showing spikes after the data was clean
+## 8. The charts still had spikes after I cleaned the data
 
-**Symptom.** After despiking, the public dashboard still drew vertical excursions
-in the final hours of each series.
+**What happened.** After I added spike removal, the website still drew tall
+vertical spikes near the end of every chart.
 
-**First attempt (wrong).** Flag a point as a spike when it deviates more than 25%
-from *both* immediate neighbours in the same direction. It caught nothing.
+**My first attempt, which did not work.** I flagged a point as a spike if it was
+more than 25% away from *both* of its neighbours in the same direction. It caught
+nothing at all.
 
-**Diagnosis.** A second diagnostic dumped the last 60 hours with every flag:
+**How I found the real problem.** I wrote a second script that printed the last 60
+hours with every flag next to them:
 
 ```
 2026-08-01 03:00   9,104 MW   +21.5% then -26.2%   flag_isolated_spike = False
 2026-08-01 06:00   9,551 MW   +47.3%                flag_isolated_spike = False
 ```
 
-Two independent failure modes. The first excursion moved 21.5% on one side, just
-under the threshold. The second was the **final row of the series**, so it had no
-"next" neighbour and the condition could never evaluate true. Neighbour comparison
-is structurally blind at series boundaries, which is precisely where preliminary,
-unsettled data lives.
+Two separate problems. The first spike was only 21.5% away on one side, just under
+my 25% threshold, so it slipped through. The second one was the **very last row**,
+so it had no next neighbour at all and my condition could never be true. Comparing
+against neighbours simply cannot work at the ends of a series, and the end is
+exactly where the newest, least reliable data sits.
 
-**Fix.** Compare against a centred 5-hour **rolling median** instead. Aggregate
-demand is smooth relative to that window, so a genuine load profile never departs
-far from its local median while an isolated excursion departs sharply regardless
-of which side it falls on, and partial windows at the boundary still resolve.
+**Fix.** I compared each point against a 5 hour rolling median centred on it
+instead. Total demand moves smoothly over five hours, so a normal day never
+strays far from its local median, while a single bad reading stands out no matter
+which side it falls on. It also still works at the ends, because a partial window
+is fine. In `warehouse/build.py`.
+
+---
+
+## 9. Rebuilding the data quietly deleted my trained models
+
+**What happened.** After running `gridpulse build --rebuild`, the file the app
+uses dropped from 13.4 MB to 6.3 MB and five tables had disappeared.
+
+**Why.** The rebuild was dropping `model_scores`, `model_predictions` and
+`anomaly_scores` along with the tables it was actually supposed to rebuild. So
+rebuilding the data threw away 24 minutes of training for no reason.
+
+**Fix.** Rebuild now only drops the tables it owns, and prints a warning that the
+model results are now out of date instead of deleting them. In
 `warehouse/build.py`.
 
 ---
 
-## 9. Rebuilding data silently destroyed model results
+## 10. Version conflicts and a missing import in the app
 
-**Symptom.** After `gridpulse build --rebuild`, the app export dropped from 13.4 MB
-to 6.3 MB with five tables missing.
+Three smaller problems, one line each:
 
-**Cause.** The rebuild path dropped `model_scores`, `model_predictions` and
-`anomaly_scores` alongside the tables it actually owned, discarding 24 minutes of
-training because someone rebuilt the data layer.
-
-**Fix.** Rebuild drops only what it owns, and warns that model outputs are now
-stale rather than deleting them. `warehouse/build.py`.
+- **`statsmodels` 0.14.4 imports something that scipy 1.17 removed.** It was only being pulled in for one trendline on a chart. I replaced that with a binned median calculated in pandas, which needs no extra library and handles outliers better, and dropped `statsmodels` from the app requirements.
+- **`SAMPLE_QUESTIONS` existed but was never exported** from the agent package's `__init__.py`, so importing it failed. I fixed it and then checked every other `__init__.py` for the same mistake.
+- **The app export had a hand written list of columns** that was missing two weather columns the feature builder needed. Nothing failed until the model tried to make a prediction. The list is now built from `WEATHER_VARIABLES` so it cannot fall out of sync again.
 
 ---
 
-## 10. Version conflicts and stale imports in the deployed app
+## 11. A chart colour setting that broke the sort order
 
-Three smaller issues, each worth a line:
+**What happened.** On the model leaderboard, the EIA benchmark bar was drawn at
+the top of the chart instead of in its correct position. Every other bar was in
+the right place.
 
-- **`statsmodels` 0.14.4 imports `scipy._lib._util._lazywhere`**, removed in scipy
-  1.17. It was pulled in only by a `trendline="lowess"` call. Replaced with a
-  binned median computed in pandas, which needs no extra dependency, is robust to
-  outliers, and reads more clearly. `statsmodels` moved out of the app requirements
-  entirely.
-- **`SAMPLE_QUESTIONS` was defined but never re-exported** from the agent package's
-  `__init__.py`. Fixed, and every other package `__init__` was swept for the same
-  omission.
-- **The app export used a hand-written column list** that silently omitted two
-  weather columns the feature builder required. The failure only surfaced at
-  inference time. The list is now derived from `WEATHER_VARIABLES` so it cannot
-  drift.
+**Why.** In Plotly Express, the `color=` argument splits your data into a separate
+trace per colour. So highlighting one bar in a different colour pulled it out into
+its own trace, and that trace was drawn without following the sort order.
+
+**Fix.** I used a single `go.Bar` with a list of colours, one per bar, plus an
+explicit category order on the axis. In `app.py`.
 
 ---
 
-## 11. A chart colour argument that broke sort order
+## 12. Fixing one problem quietly created another
 
-**Symptom.** On the model leaderboard, the EIA benchmark bar rendered at the top of
-the chart instead of in its correct rank. Every other bar was ordered correctly.
-
-**Cause.** Plotly Express's `color=` argument splits data into one trace per colour
-group. Highlighting a single bar therefore pulled it into a separate trace, which
-was drawn independently of the sort.
-
-**Fix.** A single `go.Bar` trace with per-bar `marker_color`, plus an explicit
-`categoryarray` on the axis. `app.py`.
-
----
-
-## 12. A fix for one problem that silently created another
-
-**Symptom.** The Hugging Face Space built successfully, the container started,
-Streamlit served the page, and then the app rendered:
+**What happened.** The Hugging Face Space built without errors, the container
+started, Streamlit served the page, and then the app showed:
 
 ```
 IO Error: The file "/app/data/gold/gridpulse_app.duckdb" exists,
 but it is not a valid DuckDB database file!
 ```
 
-Every layer reported success. The failure only appeared to a user opening the
-page.
+Every single step reported success. The only place the failure showed up was on
+the page itself.
 
-**Background.** Earlier the same day, `git status` was showing 910 changed lines
-across `artifacts/` on a repository nobody had touched. The diff was pure CRLF:
-Git on Windows had rewritten every line ending on checkout. The fix was a
-`.gitattributes` pinning the repository to LF, which also protects
-`deploy/entrypoint.sh`, since a shell script with CRLF fails inside a Linux
-container with `bad interpreter`.
+**What led to it.** Earlier the same day, `git status` was showing 910 changed
+lines in `artifacts/` in a repo nobody had edited. The whole diff was line
+endings: Git on Windows had rewritten them all on checkout. I fixed that by adding
+a `.gitattributes` that pins everything to Unix line endings, which also protects
+`deploy/entrypoint.sh`, because a shell script with Windows line endings fails
+inside a Linux container with `bad interpreter`.
 
 That fix was correct. It also broke the Space.
 
-**Cause.** Every Hugging Face Space ships with a default `.gitattributes` whose
-job is to declare `filter=lfs` for large-file patterns. The sync workflow
-uploads the whole repository, so the new `.gitattributes` overwrote it.
+**Why.** Every Hugging Face Space comes with its own `.gitattributes`, and its job
+is to tell Git which large files are stored in Git LFS. My sync workflow uploads
+the whole repo, so my new `.gitattributes` replaced theirs.
 
-Hugging Face stores any file above roughly 10 MB in LFS automatically, which on
-this repository means:
+Hugging Face automatically puts any file over about 10 MB into LFS, which in this
+repo means:
 
 | File | Size |
 |---|---|
@@ -248,68 +252,69 @@ this repository means:
 | `data/gold/gridpulse_app.duckdb` | 13.4 MB |
 | `artifacts/deep_*/weights.pt` | ~0.5 MB |
 
-A file is only reconstructed from LFS on checkout **if `.gitattributes` declares
-a filter for it**. With those declarations gone, the Space's Docker build
-checked out 133-byte pointer files, and `COPY data/gold ./data/gold` faithfully
-copied a pointer into the image.
+Git only swaps an LFS file back for the real thing **if `.gitattributes` says that
+file is in LFS**. Once those lines were gone, the Space's Docker build checked out
+133 byte placeholder files, and `COPY data/gold ./data/gold` copied a placeholder
+into the image instead of my database.
 
-The same files on GitHub are ordinary blobs, committed without LFS and comfortably
-inside the 100 MB per-file limit. So the identical repository was correct on one
-host and broken on the other, which is why the Streamlit deployment kept working
-throughout and gave no hint anything was wrong.
+On GitHub those same files are stored normally, not in LFS, because I committed
+them without it and they are all under GitHub's 100 MB limit. So the exact same
+repo was fine on one host and broken on the other, which is why my Streamlit
+deployment carried on working and gave me no clue anything was wrong.
 
-**Fix.** `deploy/gitattributes_space.txt`, swapped in during the sync exactly as
-`deploy/README_SPACE.md` already replaced the README. The two `.gitattributes`
-files cannot be merged, because the LFS declarations are true on the Space and
-false on GitHub; adding them to the repository would push 85 MB into GitHub LFS
-to solve a problem GitHub does not have.
+**Fix.** I added `deploy/gitattributes_space.txt` and made the sync workflow swap
+it in, the same way it already swaps in a different README for the Space. The two
+`.gitattributes` files cannot be combined, because the LFS lines are true on
+Hugging Face and false on GitHub. Putting them in the main repo would push 85 MB
+into GitHub LFS to fix a problem GitHub does not have.
 
-Order matters inside that file. The broad `* text=auto eol=lf` rule has to come
-**first**, because the last matching pattern wins per attribute. Placed last it
-would have reset `text=auto` on every binary declared above it, undoing the
-`-text` that stops Git rewriting bytes inside a DuckDB file. That was caught by
-reading the file back before committing, not by testing.
+The order of the rules inside that file matters. The general
+`* text=auto eol=lf` line has to come **first**, because when two rules match the
+same file the last one wins. If I had put it at the bottom it would have turned
+text handling back on for every binary file listed above it, which is exactly what
+corrupts a DuckDB file. I caught that by reading the file back before committing
+it, not by testing.
 
-The workflow also gained a step that fails the build if any of the three large
-files is still a pointer, checked by size and by grepping for the pointer's
-`git-lfs.github.com/spec` header.
+I also added a step to the workflow that fails the build if any of the three big
+files is still a placeholder, checked by file size and by looking for the
+`git-lfs.github.com/spec` line that placeholders contain.
 
-**The real lesson.** Fixing the line-ending bug required overwriting a file
-whose purpose was invisible from inside this repository. The default
-`.gitattributes` was never read, never diffed, and never mentioned in any commit.
-Deleting it produced no error at commit time, no error during upload, no error
-during the Docker build, and no error at container start. Every gate a CI
-pipeline normally provides was passed by an image that could not work.
+**What I actually learned.** To fix the line endings I had to overwrite a file
+whose whole purpose was invisible from inside my own repo. I never read that
+default `.gitattributes`, never looked at a diff of it, and never mentioned it in
+a commit. Deleting it caused no error when I committed, none when the files
+uploaded, none during the Docker build, and none when the container started. Every
+check I had passed an image that could not possibly work.
 
-The narrower point: **a deployment target's conventions are part of its
-interface, even when they arrive as files you did not write.** The broader one:
-when a fix works by replacing something wholesale rather than editing it, the
-question worth asking is not whether the new version is correct, but what the
-old version was doing that nobody wrote down.
+The small lesson: when you deploy somewhere, that platform's conventions are part
+of the deal, even when they show up as files you did not write. The bigger one:
+if a fix works by replacing something completely instead of editing it, the
+question to ask is not whether your new version is right, but what the old version
+was doing that nobody bothered to write down.
 
 ---
 
-## Themes
+## Things I keep coming back to
 
-**Robust statistics are not optional on real data.** Mean and standard deviation
-have a breakdown point of zero. Median and IQR do not. Forty rows in 797,677 were
-enough to make the difference between a 53.9% and a 3.7% MAPE.
+**Averages break on real data.** The mean and standard deviation can be dragged
+anywhere by one bad value. The median and IQR cannot. Forty rows out of 797,677
+were the difference between 53.9% error and 3.7%.
 
-**A quality suite only tests the failures its author imagined.** Thirteen checks
-passed while the data was corrupt enough to destroy the model. The gap was not
-subtle in hindsight, and that is exactly the point.
+**Quality checks only catch what you thought of.** Thirteen checks passed while
+the data was broken enough to destroy the model. Looking back it seems obvious,
+which is exactly the problem.
 
-**Diagnose before fixing.** Three bugs here were fixed on the first attempt because
-a script dumped the actual values first. The one bug that took two attempts was the
-one where a fix was guessed at instead.
+**Find out what is wrong before you fix it.** Three of these I fixed on the first
+try, because I wrote a script to print the actual numbers first. The one that took
+two attempts was the one where I guessed.
 
-**Boundaries are where data is worst and logic is weakest.** The final rows of a
-series carry preliminary data, and neighbour-based logic cannot classify them at
-all. Both problems met in the same place.
+**The ends of a series are the worst place for both data and logic.** The last few
+rows hold the newest and least reliable data, and anything that compares against
+neighbours cannot handle them at all. Both problems showed up in the same place.
 
-**A green pipeline is evidence about the pipeline, not about the artifact.** The
-LFS bug passed lint, tests, the sync, the Docker build and the container health
-check, and still shipped an image containing a 133-byte text file where a 13 MB
-database belonged. Checks only assert what somebody thought to assert. The
-verification step now guarding that file exists because the failure got all the
-way to a rendered page first.
+**A green pipeline tells you about the pipeline, not about what it produced.** The
+LFS bug passed the linter, the tests, the sync, the Docker build and the container
+health check, and still shipped an image with a 133 byte text file where a 13 MB
+database should have been. Checks only test what someone thought to test. The
+verification step guarding that file now exists because the failure made it all
+the way to a live page first.

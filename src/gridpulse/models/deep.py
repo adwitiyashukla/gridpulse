@@ -1,29 +1,31 @@
-"""Deep sequence models for day-ahead load forecasting (PyTorch, CPU-first).
+"""The deep learning models, written in PyTorch and built to run on a CPU.
 
-Architecture
-------------
-Both models follow the encoder / known-future-covariate pattern that underpins
-Temporal Fusion Transformer, stripped down to what trains in minutes on a laptop
-CPU rather than hours on a GPU:
+How they are put together
+-------------------------
+Both models use the same idea as the Temporal Fusion Transformer, cut down to
+something that trains in minutes on a laptop instead of hours on a GPU:
 
-* **Encoder** consumes the past ``LOOKBACK_HOURS`` (168h) of observed history:
-  demand, weather and cyclical calendar channels.
-* **Future covariate branch** consumes the next 24 hours of *known* inputs --
-  weather forecast and calendar. This is not leakage: a real operator genuinely
-  holds tomorrow's numerical weather prediction and tomorrow's calendar when they
-  produce a day-ahead forecast. Withholding it would model a harder problem than
-  the one utilities actually face.
-* **Head** fuses both and emits all 24 hours in a single forward pass (direct
-  multi-horizon), which avoids the error compounding of autoregressive rollout.
+* An **encoder** reads the last 168 hours of what actually happened: demand,
+  weather, and the time of day and week.
+* A **second branch** reads the next 24 hours of things we already know, which is
+  the weather forecast and the calendar. This is not cheating. A real grid
+  operator making a day-ahead forecast genuinely has tomorrow's weather forecast
+  and knows what day of the week it is. Hiding that would mean solving a harder
+  problem than the real one.
+* A **final layer** combines the two and predicts all 24 hours at once, instead of
+  predicting one hour and feeding it back in. Feeding predictions back in makes
+  small errors pile up.
 
-Two encoders are provided: a stacked LSTM, and a small Transformer encoder with
-sinusoidal positional encoding. The LSTM is usually the stronger performer at this
-data scale; the Transformer is included because it scales better with more series
-and demonstrates the attention machinery.
+There are two versions of the encoder: a stacked LSTM, and a small Transformer
+with sinusoidal position encoding. At this amount of data the LSTM usually does
+better. I included the Transformer because it scales better when you have far more
+series, and because I wanted to actually build the attention part rather than just
+read about it.
 
-Memory discipline: sequences are never materialised. The dataset holds one flat
-float32 array and slices windows lazily inside ``__getitem__``, so peak RAM stays
-in the tens of megabytes regardless of history length.
+One thing I had to be careful about is memory. The training windows are never all
+built at once. The dataset keeps one flat float32 array and cuts each window out
+of it only when it is asked for, so memory stays in the tens of megabytes no
+matter how much history there is.
 """
 
 from __future__ import annotations

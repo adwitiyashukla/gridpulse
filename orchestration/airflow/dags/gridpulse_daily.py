@@ -68,7 +68,7 @@ def gridpulse_daily_refresh():
 
         return build()
 
-    @task(task_id="data_quality", doc_md="Thirteen checks across six quality dimensions.")
+    @task(task_id="data_quality", doc_md="Sixteen data quality checks across six categories.")
     def data_quality(_: dict) -> dict:
         from gridpulse.quality import run_quality_suite
 

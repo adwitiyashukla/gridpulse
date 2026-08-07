@@ -1,24 +1,24 @@
-"""Dagster software-defined assets for the GridPulse platform.
+"""The GridPulse pipeline written as Dagster assets.
 
-Dagster is modelled around *assets* -- the tables and files that must exist --
-rather than *tasks* that must run. That maps naturally onto a lakehouse: each
-node below is a real materialised artifact, so the UI lineage graph is a literal
-picture of the warehouse rather than a schedule diagram.
+Dagster is built around *assets*, meaning the tables and files that need to exist,
+rather than around *tasks* that need to run. That fits this project well, because
+every node below really is a table or a file. So the diagram in the Dagster UI is
+an actual picture of the warehouse, not just a schedule.
 
-Run the UI locally::
+To run the UI locally::
 
     dagster dev -f orchestration/dagster_app/definitions.py
 
-An equivalent Airflow DAG lives in ``orchestration/airflow/dags/`` for teams
-standardised on Airflow.
+There is an equivalent Airflow DAG in ``orchestration/airflow/dags/`` for anyone
+whose team uses Airflow instead.
 """
 
-# NOTE: `from __future__ import annotations` is deliberately NOT used here.
-# PEP 563 turns every annotation into a string at runtime, and Dagster inspects
-# the `context` parameter's annotation to decide what to inject. With postponed
-# evaluation it sees the string "AssetExecutionContext" rather than the class and
-# raises DagsterInvalidDefinitionError, with a message that confusingly names the
-# very type you supplied.
+# NOTE: do not add `from __future__ import annotations` to this file.
+# It turns every type annotation into a string at runtime, and Dagster reads the
+# annotation on the `context` argument to work out what to pass in. With that
+# import it sees the text "AssetExecutionContext" instead of the actual class and
+# throws DagsterInvalidDefinitionError, with an error message that confusingly
+# names the exact type you already gave it.
 
 import sys
 from pathlib import Path
@@ -96,7 +96,7 @@ def weather_bronze(context: AssetExecutionContext) -> Output[dict]:
     group_name=GROUP_WAREHOUSE,
     compute_kind="duckdb",
     deps=[eia_bronze, weather_bronze],
-    description="Silver conformed layer plus the gold Kimball star schema: dim_ba, "
+    description="The cleaned silver layer plus the gold star schema: dim_ba, "
                 "dim_date, fact_demand_hourly and fact_forecast_accuracy.",
 )
 def gold_warehouse(context: AssetExecutionContext) -> Output[dict]:
@@ -146,8 +146,8 @@ def dbt_marts(context: AssetExecutionContext) -> Output[str]:
     group_name=GROUP_QUALITY,
     compute_kind="python",
     deps=[gold_warehouse],
-    description="Thirteen declarative quality checks across completeness, validity, "
-                "consistency, timeliness, uniqueness and accuracy.",
+    description="Sixteen data quality checks covering completeness, validity, "
+                "consistency, timeliness, duplicates and accuracy.",
 )
 def data_quality(context: AssetExecutionContext) -> Output[dict]:
     from gridpulse.quality import run_quality_suite

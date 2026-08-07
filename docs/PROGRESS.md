@@ -1,39 +1,36 @@
 # Project status
 
-**Status:** Complete. Pipeline, models, quality suite and public app all working.
+**Status:** Done. The pipeline, the models, the quality checks and the public
+website are all working, and the whole thing refreshes itself once a week.
 
-For the interesting part - every bug found while building this, its diagnosis and
-its fix - see **[ENGINEERING_LOG.md](ENGINEERING_LOG.md)**.
+Live at [Hugging Face](https://huggingface.co/spaces/adwitiyashukla/gridpulse) and
+[Streamlit](https://gridpulse-ai.streamlit.app).
+
+The most useful part of this repo is probably
+**[ENGINEERING_LOG.md](ENGINEERING_LOG.md)**, where I wrote up every bug I hit,
+what caused it and how I fixed it.
 
 ---
 
-## Verified end to end
+## What I checked works, end to end
 
-| Stage | Result |
+| Step | What happened |
 |---|---|
-| Test suite | All passing, no network or API keys required |
-| `gridpulse probe` | EIA API v2.1.13, contract validated |
-| `gridpulse ingest` | 3,185,904 EIA rows + 802,080 weather rows, 12 balancing authorities |
-| `gridpulse build` | 797,677 hourly fact rows, 794,835 carrying the EIA benchmark |
-| `gridpulse quality` | 16/16 checks passed, score 100% |
-| `gridpulse train` | Best model 2.771% MAPE, 25.0% better than the EIA benchmark |
-| `gridpulse anomalies` | 20,986 anomalies flagged across three detectors |
-| `gridpulse export` | 13.4 MB app artifact, 9 tables |
+| Test suite | All tests pass, and they need no internet and no API keys |
+| `gridpulse probe` | Talks to the EIA API and confirms the responses look how I expect |
+| `gridpulse ingest` | About 3.2 million EIA rows and 800,000 weather rows, for 12 regions |
+| `gridpulse build` | Roughly 800,000 hourly rows, almost all of them with EIA's forecast attached |
+| `gridpulse quality` | 16 out of 16 checks passing |
+| `gridpulse train` | The best model beats EIA's own forecast by around 24% |
+| `gridpulse anomalies` | About 21,000 unusual hours flagged by three detectors |
+| `gridpulse export` | A 13 MB database for the website, with 9 tables |
 
-## Headline
+I have kept the numbers above approximate on purpose. The exact figures change
+every Monday when the refresh workflow retrains everything, and the live versions
+are always in `artifacts/leaderboard.json` and in the results table in the main
+[README](../README.md), which gets rebuilt automatically after each retrain.
 
-| Model | MAPE | vs EIA |
-|---|---|---|
-| LightGBM hybrid (+ EIA forecast as input) | 2.771% | +25.0% |
-| LightGBM (global, from first principles) | 3.676% | +0.55% |
-| EIA official day-ahead forecast | 3.696% | benchmark |
-| Seasonal naive (24h) | 5.677% | -53.6% |
-| Weekly naive (168h) | 9.117% | -146.7% |
-
-Measured on 25,927 out-of-sample hours across 12 balancing authorities, using a
-strictly chronological split.
-
-## Reproduce
+## Running it yourself
 
 ```powershell
 python -m venv .venv
@@ -42,12 +39,16 @@ pip install -r requirements-dev.txt
 pip install -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu
 pip install -e . --no-deps
 
-copy .env.example .env      # add EIA_API_KEY, optionally GROQ_API_KEY
+copy .env.example .env      # add EIA_API_KEY, and GROQ_API_KEY if you want the AI tab
 
 gridpulse probe
 gridpulse all
 streamlit run app.py
 ```
 
-Deployment steps are in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
-Interview preparation notes are in **[INTERVIEW_NOTES.md](INTERVIEW_NOTES.md)**.
+`gridpulse all` takes roughly 20 to 40 minutes on a normal laptop, mostly
+downloading data and training.
+
+How to deploy it is in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+Questions I expect to be asked in interviews, and my answers, are in
+**[INTERVIEW_NOTES.md](INTERVIEW_NOTES.md)**.

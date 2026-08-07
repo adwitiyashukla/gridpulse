@@ -1,14 +1,14 @@
-"""Forecast accuracy metrics, framed the way a utility actually scores them.
+"""The metrics used to score the forecasts, chosen to match how utilities score them.
 
-MAPE is the industry lingua franca for load forecasting -- a system operator will
-quote "we run about 2 percent MAPE" without further qualification -- so it leads
-here. It is reported alongside MAE and RMSE because MAPE alone hides the cost
-asymmetry: RMSE punishes the large misses that trigger expensive peaker starts,
-while MAPE treats a 500 MW miss at 3am the same as one at 5pm on a heatwave.
+MAPE is what the power industry normally uses, so it comes first here. Someone who
+runs a grid will say "we run about 2 percent MAPE" and everyone knows what that
+means. But I report MAE and RMSE next to it, because MAPE on its own hides the fact
+that some mistakes cost much more than others. RMSE punishes the big misses, which
+are the ones that force an expensive backup plant to start up, while MAPE treats
+being 500 MW off at 3am the same as being 500 MW off at 5pm in a heatwave.
 
-``skill_vs_benchmark`` expresses accuracy as percentage improvement over EIA's own
-published day-ahead forecast, which is the only comparison a hiring manager in this
-industry will care about.
+``skill_vs_benchmark`` turns the accuracy into a percentage improvement over EIA's
+own published forecast, which is the comparison that actually matters here.
 """
 
 from __future__ import annotations
@@ -61,10 +61,11 @@ def r2(y_true, y_pred) -> float:
 
 
 def peak_hour_mape(frame: pd.DataFrame, actual: str, predicted: str) -> float:
-    """MAPE restricted to each day's peak-demand hour.
+    """MAPE calculated only on the busiest hour of each day.
 
-    Peak accuracy drives capacity procurement and is where forecast error becomes
-    genuinely expensive, so it is scored separately from the all-hours average.
+    The peak hour is what decides how much generation gets bought, and it is where
+    being wrong costs the most money, so I score it separately from the average
+    across all hours.
     """
     if frame.empty:
         return float("nan")
@@ -73,7 +74,7 @@ def peak_hour_mape(frame: pd.DataFrame, actual: str, predicted: str) -> float:
 
 
 def pinball_loss(y_true, y_pred, quantile: float) -> float:
-    """Quantile (pinball) loss -- the correct score for probabilistic forecasts."""
+    """Pinball loss, which is the right way to score a quantile prediction."""
     true, pred = _clean(y_true, y_pred)
     if true.size == 0:
         return float("nan")

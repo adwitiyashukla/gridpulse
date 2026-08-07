@@ -23,7 +23,10 @@ jobs:
         run: pip install ruff==0.8.6
       - name: Check formatting and lint rules
         run: |
-          ruff check src tests orchestration app.py
+          # scripts/ is included because update_readme.py runs inside the weekly
+          # refresh workflow. It is production code, not a scratch folder, and
+          # leaving it unlinted let two rule violations sit there unnoticed.
+          ruff check src tests orchestration scripts app.py
           ruff format --check src tests app.py || echo "::warning::Formatting drift detected (non-blocking)"
 
   test:

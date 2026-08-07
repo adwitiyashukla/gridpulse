@@ -1,30 +1,33 @@
-"""Feature engineering for day-ahead hourly load forecasting.
+"""Building the features the models learn from.
 
-Feature design here follows what actually drives electricity demand rather than
-throwing every column at the model:
+I picked these based on what actually makes electricity demand go up and down,
+rather than throwing every available column at the model:
 
-**Calendar**
-    Hour, weekday and season encoded *cyclically* (sine/cosine pairs) so that hour
-    23 sits adjacent to hour 0 instead of 23 units away. Holidays and the days
-    flanking them get explicit flags because commercial load collapses on them.
+**Calendar features**
+    Hour, weekday and season are encoded as sine and cosine pairs, so that hour 23
+    sits right next to hour 0 instead of looking 23 units away from it. Holidays,
+    and the days either side of them, get their own flags, because office and
+    factory demand drops off a cliff on those days.
 
 **Lags**
-    Demand 24, 48 and 168 hours back. The 168-hour (one week) lag is the single
-    strongest predictor in load forecasting: last Tuesday at 3pm resembles this
-    Tuesday at 3pm far more than 3am this morning does.
+    Demand from 24, 48 and 168 hours ago. The 168 hour one (exactly a week) is the
+    strongest single predictor there is for this problem. Last Tuesday at 3pm looks
+    far more like this Tuesday at 3pm than 3am this morning does.
 
-**Rolling statistics**
-    Trailing means and standard deviations, all shifted by the forecast horizon so
-    that no value observable only *after* prediction time can leak in.
+**Rolling averages**
+    Averages and standard deviations over recent hours, all shifted back by the
+    full 24 hour forecast horizon, so nothing that would only be known after
+    prediction time can sneak in.
 
 **Weather**
-    Temperature plus explicitly separated heating and cooling degrees. Demand
-    versus temperature is V-shaped, not linear; splitting the limbs lets even a
-    linear model capture it, and lets a tree model find the breakpoints faster.
+    Temperature, plus heating degrees and cooling degrees kept as separate columns.
+    Demand against temperature is V-shaped rather than a straight line, so splitting
+    it into the cold side and the hot side lets even a simple model pick it up, and
+    helps a tree model find the turning point faster.
 
-Leakage discipline: every feature is a function of information available strictly
-before the prediction timestamp, except the weather covariates, which a real
-operator genuinely does hold in advance as a numerical weather forecast.
+On leakage: every feature only uses information that existed before the moment
+being predicted. The one exception is the weather, and that is fine, because a real
+grid operator also has tomorrow's weather forecast in hand.
 """
 
 from __future__ import annotations
@@ -163,7 +166,7 @@ def _engineer_one_ba(frame: pd.DataFrame) -> pd.DataFrame:
     out["temp_roll_mean_24h"] = temp.rolling(24, min_periods=6).mean()
 
     # ---- interactions ----------------------------------------------------
-    # Commercial cooling load only materialises on working days.
+    # Offices and shops only run their air conditioning on working days.
     out["cooling_x_business"] = out["cooling_degrees"] * out["is_business_day"]
     out["heating_x_business"] = out["heating_degrees"] * out["is_business_day"]
     # Afternoon heat compounds: the same 35C bites harder at 4pm than at 4am.

@@ -1,19 +1,20 @@
-"""Training orchestration: build features, fit every model, score them all identically.
+"""Runs the training: builds the features, fits every model, scores them the same way.
 
-The comparison is the point. Six forecasters are evaluated on one identical
-out-of-sample window, and the benchmark is not something invented here -- it is the
-day-ahead forecast the EIA itself published and grid operators actually used:
+Comparing them fairly is the whole point. Six forecasters are tested on exactly the
+same set of held-out hours, and the one they are compared against is not a baseline
+I made up. It is the day-ahead forecast the EIA published and grid operators
+actually used:
 
-1. Seasonal naive (24h)
-2. Weekly naive (168h)
-3. **EIA official day-ahead forecast**  <- the benchmark to beat
-4. LightGBM global model with P10/P50/P90 intervals
-5. LSTM encoder with known future covariates
-6. Transformer encoder with known future covariates
+1. Seasonal naive, meaning "same hour yesterday"
+2. Weekly naive, meaning "same hour last week"
+3. **EIA's official day-ahead forecast**  <- the one to beat
+4. LightGBM trained on all regions, with P10/P50/P90 bands
+5. LSTM, which also gets tomorrow's weather and calendar
+6. Transformer, same inputs as the LSTM
 
-Every model is scored on the same rows, over the same horizon, with the same
-metrics. Results land in ``model_scores`` and ``model_predictions``, and every run
-is tracked in MLflow.
+Every model is scored on the same rows, over the same 24 hours ahead, with the same
+metrics. The results go into ``model_scores`` and ``model_predictions``, and each
+run is logged to MLflow.
 """
 
 from __future__ import annotations
@@ -99,17 +100,17 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
     gbm.save()
 
     # ------------------------------------------------------------------
-    # 4b. Hybrid: the same model, additionally consuming EIA's published
-    # day-ahead forecast as an input feature.
+    # 4b. Hybrid version: the same model, but it also gets to read EIA's
+    # published day-ahead forecast as one of its inputs.
     #
-    # This is not leakage. EIA publishes that forecast the day before, so it is
-    # genuinely in an operator's hands at prediction time -- and no real utility
-    # ignores their vendor's forecast. The hybrid learns to correct EIA's
-    # systematic biases rather than re-deriving the whole signal from scratch,
-    # which is exactly how a forecasting desk actually operates.
+    # This is not cheating. EIA publishes that forecast the day before, so it
+    # really is available at prediction time, and no real utility ignores a
+    # forecast they already have. This version learns to correct the mistakes EIA
+    # consistently makes, instead of working the whole thing out from scratch,
+    # which is closer to how a real forecasting team works anyway.
     #
-    # Both models are reported. The pure model answers "can we beat them from
-    # first principles"; the hybrid answers "can we improve what they publish".
+    # I report both. The plain model answers "can I beat them starting from
+    # nothing", and the hybrid answers "can I improve on what they publish".
     # ------------------------------------------------------------------
     if train["demand_forecast_mwh"].notna().mean() > 0.9:
         logger.info("Training LightGBM hybrid (EIA forecast as an input feature)")

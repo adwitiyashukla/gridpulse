@@ -1,25 +1,26 @@
-"""Gradient-boosted load forecasting with calibrated prediction intervals.
+"""LightGBM demand forecasting, with P10/P50/P90 prediction bands.
 
-One *global* model is trained across every balancing authority with ``ba_code`` as
-a categorical feature, rather than one model per BA. This is deliberate:
+I train one model across all 12 regions, with the region code as a categorical
+feature, instead of 12 separate models. Reasons:
 
-* BAs share physics. The shape of the temperature/demand response in Atlanta
-  genuinely informs the same curve in Charlotte, so pooling acts as regularisation
-  for the smaller territories.
-* One artifact is one thing to deploy, version and monitor. Twelve are twelve.
-* Adding a thirteenth BA becomes a data change, not a training-infrastructure change.
+* The regions behave similarly. How demand responds to temperature in Atlanta
+  really does tell you something about the same curve in Charlotte, so training
+  together helps the smaller regions.
+* One model file is one thing to deploy, version and keep an eye on. Twelve
+  models are twelve of everything.
+* Adding a thirteenth region is then just more data, not more infrastructure.
 
-Pooling only works in **normalised space**. BA demand spans two orders of magnitude
-(ISNE peaks near 25 GW, PJM near 150 GW), so a loss computed on raw megawatthours is
-dominated entirely by the largest systems: the model spends its capacity shaving
-error off PJM and never learns the smaller ones. Training on a per-BA z-score makes
-every system contribute comparably, and predictions are inverted back to MW before
-scoring. Skipping this step causes the model to early-stop within a handful of
-trees, which is exactly what it did before this was added.
+This only works if the demand is scaled first. The regions differ by a factor of
+about a hundred (ISNE peaks around 25 GW, PJM around 150 GW), so if you train on
+raw megawatthours the loss is completely dominated by the biggest regions. The
+model spends all its effort on PJM and never learns the small ones. Scaling each
+region separately puts them on a comparable footing, and predictions get converted
+back to MW before anything is scored. Without this step the model gives up after a
+handful of trees, which is exactly what happened before I added it.
 
-Alongside the point forecast, three quantile models produce P10/P50/P90 bands.
-Utilities do not procure against a point estimate; they procure against a plausible
-worst case, so the interval is the operationally useful output.
+As well as the single number forecast, three more models predict the 10th, 50th
+and 90th percentiles. Utilities do not plan against a single number, they plan
+against a realistic worst case, so the range is the more useful output.
 """
 
 from __future__ import annotations
@@ -42,10 +43,11 @@ CATEGORICAL = ["ba_code"]
 
 @dataclass
 class BATargetScaler:
-    """Per-balancing-authority standardisation of the forecast target.
+    """Scales demand separately for each region, so they can share one model.
 
-    Statistics are fitted on training rows only. ``inverse`` maps predictions back
-    to megawatthours so every downstream metric is reported in physical units.
+    The numbers are worked out from the training rows only, never the test rows.
+    ``inverse`` converts predictions back into megawatthours, so every metric
+    downstream is reported in real units rather than scaled ones.
     """
 
     stats: dict[str, tuple[float, float]]
@@ -54,20 +56,20 @@ class BATargetScaler:
 
     @classmethod
     def fit(cls, frame: pd.DataFrame) -> BATargetScaler:
-        """Fit robust centre and scale per balancing authority.
+        """Work out the middle and the spread of demand for each region.
 
-        Median and inter-quartile range are used rather than mean and standard
-        deviation. The mean has a breakdown point of zero -- one corrupt reading
-        moves it without bound -- and real EIA telemetry does contain occasional
-        values several orders of magnitude too large. A single such row inflated
-        PJM's standard deviation to 10.7 million MW against a true range of
-        roughly 70,000-165,000 MW, which destroyed the normalisation and every
-        prediction that depended on it. The median does not move.
+        I use the median and the IQR here instead of the mean and standard
+        deviation. One impossible reading can drag a mean anywhere it likes, and
+        the real EIA data does occasionally contain values that are wildly too
+        big. A single row like that pushed PJM's standard deviation up to 10.7
+        million MW when the real range is about 70,000 to 165,000 MW, which
+        wrecked the scaling and every prediction that depended on it. The median
+        does not move no matter how extreme one value is.
         """
         grouped = frame.groupby("ba_code")[TARGET]
         centre = grouped.median()
-        # 1.349 rescales the IQR to be comparable with a standard deviation
-        # under normality, keeping the z-scores on a familiar scale.
+        # Dividing the IQR by 1.349 puts it on roughly the same scale as a
+        # standard deviation would be, so the scaled values stay familiar.
         spread = (grouped.quantile(0.75) - grouped.quantile(0.25)) / 1.349
 
         stats = {

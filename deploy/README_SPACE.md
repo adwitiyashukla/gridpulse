@@ -30,34 +30,36 @@ strictly chronological split.
 
 | Tab | What it does |
 |---|---|
-| **Forecast** | Generate a live 24-hour demand forecast with P10-P90 intervals for any balancing authority, using real-time weather |
-| **Explorer** | Historical demand, the V-shaped temperature response, weekday vs weekend load shapes |
-| **Model Leaderboard** | Every model scored against the EIA's official forecast on identical out-of-sample hours |
-| **Anomalies** | Suspect hours flagged by three independent detectors voting in consensus |
-| **Data Quality** | Scorecard across six classical data quality dimensions |
-| **Ask the Grid** | Ask a question in plain English, get guarded SQL and a chart back |
+| **Forecast** | Make a live 24-hour forecast with a P10-P90 range for any of the 12 regions, using the current weather forecast |
+| **Explorer** | Past demand, the V-shaped link between temperature and demand, and how weekdays differ from weekends |
+| **Model Leaderboard** | Every model scored against EIA's own forecast on exactly the same test hours |
+| **Anomalies** | Hours that look wrong, found by three detectors that have to agree |
+| **Data Quality** | A scorecard covering six categories of data quality |
+| **Ask the Grid** | Ask a question in normal English and get SQL and a chart back |
 
-## What sits behind it
+## What is behind it
 
-This Space is the front end of a full data platform:
+This Space is just the website. Behind it there is a full data pipeline:
 
-- Incremental, watermarked extraction from the EIA Open Data API and Open-Meteo
-- A medallion lakehouse on DuckDB with a Kimball star schema
-- 16 declarative data quality checks across completeness, validity, consistency,
-  timeliness, uniqueness and accuracy
-- LightGBM with P10/P50/P90 quantile bands, plus PyTorch LSTM and Transformer
-  encoders for comparison
-- Three-detector anomaly consensus: robust seasonal z-score, Isolation Forest and
-  a daily-load-shape autoencoder
-- A guarded LLM text-to-SQL agent (read-only connection, SELECT-only, table
-  allowlist, enforced row cap)
+- Downloads data from the EIA and Open-Meteo APIs a bit at a time, remembering
+  where it got to so it never re-downloads the same thing
+- Stores it in bronze, silver and gold layers, ending in a star schema in DuckDB
+- Runs 16 data quality checks covering completeness, validity, consistency,
+  timeliness, duplicates and accuracy
+- Trains LightGBM with P10/P50/P90 bands, plus an LSTM and a Transformer in
+  PyTorch so I could compare them properly
+- Finds unusual hours using three different detectors that have to agree: a
+  seasonal z-score, an Isolation Forest, and an autoencoder trained on daily
+  demand shapes
+- Has an LLM that writes SQL, wrapped in guardrails (read-only connection, SELECT
+  only, a list of allowed tables, and a row limit)
 
-## Configuration
+## Setup
 
 The **Ask the Grid** tab needs a `GROQ_API_KEY` under
-**Settings → Variables and secrets**. Free keys at
-[console.groq.com/keys](https://console.groq.com/keys). Everything else works
-without any configuration.
+**Settings, Variables and secrets**. Keys are free at
+[console.groq.com/keys](https://console.groq.com/keys). Everything else works with
+no setup at all.
 
 ## Source
 

@@ -50,7 +50,7 @@ def render_table(rows: list[dict]) -> str:
         skill = row.get("skill_vs_eia_pct")
         if row["model"] == "eia_official":
             skill_cell = "- (benchmark)"
-        elif isinstance(skill, (int, float)):
+        elif isinstance(skill, int | float):
             skill_cell = f"**{skill:+.1f}%**" if skill > 0 else f"{skill:+.1f}%"
         else:
             skill_cell = "-"
@@ -73,7 +73,7 @@ def main() -> int:
     if HEADLINE.exists():
         head = json.loads(HEADLINE.read_text())
         skill = head.get("skill_vs_eia_pct")
-        if isinstance(skill, (int, float)) and skill > 0:
+        if isinstance(skill, int | float) and skill > 0:
             label = PRETTY.get(head["best_model"], head["best_model"]).replace("*", "")
             table = (
                 f"> ### {skill:.1f}% more accurate than the EIA's own day-ahead forecast\n"

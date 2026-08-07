@@ -3,7 +3,7 @@ version: 2
 sources:
   - name: gridpulse
     description: >
-      Gold-layer tables materialised by the GridPulse Python pipeline
+      Gold layer tables built by the GridPulse Python pipeline
       (`gridpulse build`). dbt models analytics marts on top of them.
     schema: main
     tables:

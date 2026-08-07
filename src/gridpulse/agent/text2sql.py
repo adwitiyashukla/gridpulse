@@ -1,25 +1,29 @@
-"""Natural-language analytics agent over the GridPulse warehouse.
+"""Letting people ask questions in plain English instead of writing SQL.
 
-Ask "which balancing authority had the worst forecast error last month?" and get a
-chart, not a SQL editor. The interesting engineering here is not calling an LLM --
-that part is four lines -- it is refusing to trust what comes back.
+You can ask "which region had the worst forecast error last month?" and get a
+chart back rather than a SQL editor. The part I actually had to think about is not
+calling the LLM, which is about four lines of code. It is not trusting what comes
+back from it.
 
-Defence in depth, applied in order:
+There are six checks, in this order:
 
-1. **Read-only connection.** The database is opened ``read_only=True``, so even a
-   perfect prompt injection cannot write.
-2. **Statement whitelist.** Exactly one statement, and it must begin ``SELECT`` or
-   ``WITH``. Anything else is rejected before execution.
-3. **Keyword blocklist.** DDL and DML verbs are refused outright, including when
-   smuggled inside comments or as a second statement after a semicolon.
-4. **Table allowlist.** Only known warehouse tables may be referenced, which blocks
-   reads against DuckDB's internal catalogs.
-5. **Mandatory LIMIT.** Injected if the model forgets one, capping any single answer.
-6. **Grounded schema prompt.** The live schema is introspected and injected, so the
-   model is describing real columns rather than inventing plausible ones.
+1. **The connection is read-only.** I open the database with ``read_only=True``,
+   so even if someone completely tricked the model, it still could not change
+   anything.
+2. **Only one statement, and it has to be a SELECT.** It must start with
+   ``SELECT`` or ``WITH``. Anything else gets rejected before it runs.
+3. **Banned keywords.** Anything that creates, changes or deletes data is refused,
+   including when it is hidden inside a comment or tacked on after a semicolon.
+4. **A list of allowed tables.** Only my actual warehouse tables can be queried,
+   which stops anyone reading DuckDB's internal system tables.
+5. **A forced LIMIT.** If the model forgets one, I add it, so no single query can
+   return a huge amount of data.
+6. **The real schema goes into the prompt.** I read the actual table and column
+   names out of the database and put them in the prompt, so the model describes
+   real columns instead of inventing ones that sound plausible.
 
-The generated SQL is always returned to the caller alongside the result. An analyst
-who cannot see the query has no way to know whether to believe the answer.
+The SQL it generated always comes back along with the answer. If you cannot see
+the query, you have no way to judge whether the answer is right.
 """
 
 from __future__ import annotations

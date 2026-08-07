@@ -1,4 +1,4 @@
-"""Data quality framework: declarative checks, scored results, persisted scorecard."""
+"""Data quality: the checks, their scores, and the scorecard saved to the database."""
 
 from gridpulse.quality.checks import CHECKS, QualityReport, run_quality_suite
 

@@ -1,21 +1,22 @@
-"""EIA-930 hourly grid telemetry extraction (EIA Open Data API v2).
+"""Downloading the hourly grid data from the EIA API.
 
-Pulls four hourly series per balancing authority from the ``region-data`` endpoint:
+For each region I pull four hourly series from the ``region-data`` endpoint:
 
 ==========  ====================================================================
-``D``       Actual demand (MWh) -- the forecasting target
-``DF``      EIA's own published day-ahead demand forecast -- the benchmark we beat
-``NG``      Net generation (MWh)
-``TI``      Total interchange (MWh), net exports to neighbouring BAs
+``D``       Demand in MWh, which is what I am trying to predict
+``DF``      EIA's own day-ahead forecast, which is what I compare against
+``NG``      Net generation in MWh
+``TI``      Power traded with neighbouring regions, in MWh
 ==========  ====================================================================
 
-The ``DF`` series is what makes this project honest: rather than inventing a
-baseline, every model is scored against the forecast the US government actually
-published and operated against on the day.
+The ``DF`` series is the important one. Instead of making up my own easy baseline,
+I score every model against the forecast the US government actually published and
+actually ran the grid against that day.
 
-Loading is **incremental and idempotent**. Each run reads the high-water mark
-already present in bronze and requests only newer periods, so a daily cron costs
-a handful of requests instead of a full re-download.
+Downloads only fetch what is new. Each run looks at the latest timestamp already
+saved and asks for periods after that, so a scheduled run costs a handful of
+requests rather than downloading everything again. Running it twice does not create
+duplicates.
 """
 
 from __future__ import annotations
@@ -114,7 +115,11 @@ def _normalise(records: list[dict]) -> pd.DataFrame:
 
 
 def _merge(existing: pd.DataFrame, fresh: pd.DataFrame) -> pd.DataFrame:
-    """Idempotent upsert: newest ingestion wins on the natural key."""
+    """Merge new rows in. If a row already exists, the newest download wins.
+
+    Written this way so that running the download twice does not create duplicate
+    rows, which matters because the scheduled job can overlap with a manual run.
+    """
     if existing.empty:
         combined = fresh
     elif fresh.empty:

@@ -1,28 +1,30 @@
-"""Grid anomaly detection: bad telemetry, demand shocks and abnormal load days.
+"""Finding unusual hours: broken meters, sudden demand changes and strange days.
 
-Three detectors vote, because each alone has a characteristic blind spot:
+I use three detectors and make them vote, because each one on its own misses a
+different kind of problem:
 
-**Robust seasonal z-score**
-    Residual against the median load for that BA, hour-of-day and month, scaled by
-    median absolute deviation. MAD is used rather than standard deviation precisely
-    because the outliers we are hunting would inflate a standard deviation and hide
-    themselves. Catches point spikes and drops; blind to correlated multi-hour drift.
+**Seasonal z-score**
+    Compares each hour against the median demand for that region, at that hour of
+    the day, in that month, then scales by the median absolute deviation. I use
+    MAD rather than standard deviation because the weird values I am looking for
+    would inflate a standard deviation and end up hiding themselves. This catches
+    single spikes and drops, but it misses slow drift over several hours.
 
 **Isolation Forest**
-    Unsupervised, multivariate, over demand level, ramp rate, temperature and the
-    temperature/demand relationship. Catches combinations that are individually
-    unremarkable -- moderate load at a moderate temperature can still be anomalous
-    if that pairing never otherwise occurs.
+    Looks at several things at once: demand level, how fast demand is changing,
+    temperature, and how demand relates to temperature. This catches combinations
+    that look fine one at a time. Normal demand at a normal temperature can still
+    be odd if those two never usually go together.
 
-**Daily-profile autoencoder**
-    A small dense autoencoder compresses each 24-hour shape to an 8-dimensional
-    bottleneck and reconstructs it. Days whose *shape* is unlike anything in the
-    training set reconstruct badly, even when every individual hour sits inside its
-    normal range. This is the detector that finds holidays behaving like weekends,
-    storm days and demand-response events.
+**Autoencoder on the daily shape**
+    A small neural network squeezes each day's 24 hour shape down to 8 numbers and
+    then tries to rebuild it. Days whose shape is unlike anything it trained on come
+    back badly rebuilt, even if every individual hour looks normal on its own. This
+    is the one that spots holidays acting like weekends, storm days, and days where
+    customers were paid to use less power.
 
-Consensus scoring keeps false positives manageable: an hour is flagged ``high``
-severity only when at least two independent detectors agree.
+Making them vote keeps the false alarms down: an hour is only marked ``high``
+severity when at least two of the three detectors agree it is strange.
 """
 
 from __future__ import annotations
