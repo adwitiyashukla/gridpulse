@@ -37,19 +37,19 @@ lockstep by CI rather than by hand.
 
 | Tab | What it does |
 |---|---|
-| **Forecast** | Generates a live 24-hour forecast with P10-P90 intervals, calling Open-Meteo in real time and running the trained LightGBM model in the browser session |
-| **Explorer** | Historical demand, the V-shaped temperature response, weekday vs weekend load shapes |
-| **Model Leaderboard** | Every model scored against the EIA's published forecast on identical out-of-sample hours |
-| **Anomalies** | Suspect hours flagged by three independent detectors voting in consensus |
-| **Data Quality** | Scorecard across six classical data quality dimensions, 16 checks |
-| **Ask the Grid** | Plain English question, guarded SQL, chart back. The generated SQL is always shown |
-| **How it works** | The architecture, in the app itself |
+| Forecast | Generates a live 24-hour forecast with P10-P90 intervals, calling Open-Meteo in real time and running the trained LightGBM model in the browser session |
+| Explorer | Historical demand, the V-shaped temperature response, weekday vs weekend load shapes |
+| Model Leaderboard | Every model scored against the EIA's published forecast on identical out-of-sample hours |
+| Anomalies | Suspect hours flagged by three independent detectors voting in consensus |
+| Data Quality | Scorecard across six classical data quality dimensions, 16 checks |
+| Ask the Grid | Plain English question, guarded SQL, chart back. The generated SQL is always shown |
+| How it works | The architecture, in the app itself |
 
 ---
 
 ## The problem
 
-A balancing authority must commit generation for tomorrow **today**. Over-forecast
+A balancing authority must commit generation for tomorrow today. Over-forecast
 and you burn fuel producing electricity nobody uses. Under-forecast and you buy on
 the spot market at penalty prices, or you shed load. Across a system like PJM, a
 single percentage point of forecast error is worth millions of dollars a year.
@@ -57,11 +57,11 @@ single percentage point of forecast error is worth millions of dollars a year.
 ## Why this project is falsifiable
 
 Most forecasting portfolios invent a weak baseline and beat it. This one does not
-have to. The EIA publishes each balancing authority's **own day-ahead demand
-forecast** alongside what actually happened, in the same dataset. That is the
+have to. The EIA publishes each balancing authority's own day-ahead demand
+forecast alongside what actually happened, in the same dataset. That is the
 forecast grid operators genuinely published and genuinely operated against.
 
-**It is the benchmark here.** Every model in this repository is scored against it,
+It is the benchmark here. Every model in this repository is scored against it,
 on identical out-of-sample hours, with identical metrics.
 
 ## Results
@@ -98,40 +98,41 @@ authorities, using a strictly chronological split.
 
 Numbers above are real and reproducible. These caveats belong with them.
 
-**The two claims are different claims.** `gbm` uses only weather, calendar and the
-demand history, and beats the EIA benchmark by 0.6% - a genuine win, but a narrow
-one. `gbm_hybrid` additionally consumes EIA's published forecast as an input and
-beats it by 25.0%. That is not leakage (EIA publishes day-ahead, so the value
-genuinely exists at prediction time) but it is a *different* problem: correcting a
+The two claims are different claims. `gbm` uses only weather, calendar and the
+demand history, and beats the EIA benchmark narrowly. `gbm_hybrid` additionally
+consumes EIA's published forecast as an input and beats it by a much wider
+margin. That is not leakage (EIA publishes day-ahead, so the value genuinely
+exists at prediction time) but it is a *different* problem: correcting a
 published forecast rather than producing one from first principles. Both are
-reported because conflating them would be dishonest.
+reported because conflating them would be dishonest. Exact figures for each are
+in the results table above, which is regenerated after every retrain.
 
-**The comparison flatters us slightly.** EIA's forecast was produced in real time
+The comparison flatters us slightly. EIA's forecast was produced in real time
 under operational constraints. Ours is fitted with the benefit of a full historical
 record, even though it never sees the test window. It is a fair accuracy
 comparison, not a claim of operational superiority.
 
-**Prediction intervals are undercovering.** The P10-P90 band captures 58.4% of
+Prediction intervals are undercovering. The P10-P90 band captures roughly 58% of
 actuals against a nominal 80%. The intervals are too narrow. The fix is conformal
 calibration - computing the empirical residual quantile on a holdout and rescaling
 the band - which is the next thing on the roadmap.
 
-**EIA still wins at peak hours.** Their peak-hour MAPE is 2.70% against our 3.47%.
-Peak accuracy drives capacity procurement and is where forecast error is most
-expensive, so this is the gap that matters most operationally.
+EIA still wins at peak hours. Their peak-hour MAPE is lower than ours, as the
+peak-hour column in the results table shows. Peak accuracy drives capacity
+procurement and is where forecast error is most expensive, so this is the gap
+that matters most operationally.
 
-**The deep models lose.** The LSTM (5.94%) and Transformer
-(8.05%) are beaten by both gradient-boosted models, and
-neither beats a seasonal naive baseline (5.68%). At twelve
-series and seven years of history this is the expected result:
-sequence models start to win with many more series or richer exogenous inputs. They
-are included because the architectural comparison is real and shipping only the
-winner would hide it.
+The deep models lose. The LSTM and Transformer encoders are beaten by both
+gradient-boosted models, and neither beats a seasonal naive baseline. At twelve
+series and seven years of history this is the expected result: sequence models
+start to win with many more series or richer exogenous inputs. They are included
+because the architectural comparison is real and shipping only the winner would
+hide it.
 
 > Every bug found while building this, with diagnosis and fix, is written up in
-> **[docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md)**.
+> [docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
 
-**Forty corrupt readings nearly sank the project.** Out of 797,677 hours, 40 values
+Forty corrupt readings nearly sank the project. Out of roughly 800,000 hours, 40 values
 were physically impossible. They inflated PJM's standard deviation to 10.7 million
 MW against a true range near 70,000-165,000 MW, which corrupted the target
 normalisation and produced a 53.9% MAPE. The quality suite did not catch it,
@@ -206,39 +207,39 @@ through a REST API and a public web app.
 Anyone can wire libraries together. These are the choices an interviewer should
 probe, with the reasoning already written down.
 
-**DuckDB rather than Postgres or Spark.** Columnar OLAP over hundreds of millions
+DuckDB rather than Postgres or Spark. Columnar OLAP over hundreds of millions
 of rows inside a single embedded file, with no server process. On constrained
 hardware this is the difference between a pipeline that runs and one that swaps.
 The SQL ports to Snowflake, BigQuery or Azure Synapse unchanged.
 
-**One global model, not one per balancing authority.** BAs share physics: the shape
+One global model, not one per balancing authority. BAs share physics: the shape
 of the temperature/demand response in Atlanta genuinely informs the same curve in
 Charlotte, so pooling regularises the smaller territories using the larger ones. It
 also means one artifact to deploy, version and monitor rather than twelve, and
 adding a thirteenth BA becomes a data change rather than an infrastructure change.
 
-**Flag bad data, never delete it.** A meter reporting the identical value for six
+Flag bad data, never delete it. A meter reporting the identical value for six
 straight hours is not stable, it is stuck. Silently dropping that row destroys the
 only evidence that anything went wrong. Every suspect value survives into the
 warehouse carrying a flag, and the modelling layer decides what to do with it.
 
-**Chronological splits only.** A random train/test split on time-series data leaks
+Chronological splits only. A random train/test split on time-series data leaks
 the future through neighbouring rows and produces beautiful, meaningless validation
 scores. Every split here is by timestamp, and there is a test asserting it.
 
-**Known future covariates are not leakage.** The models consume tomorrow's weather
+Known future covariates are not leakage. The models consume tomorrow's weather
 forecast and tomorrow's calendar. That is legitimate: a system operator genuinely
 holds a numerical weather prediction when they produce a day-ahead forecast.
 Withholding it would model a harder problem than the one utilities actually face.
 Rolling statistics over *past* demand, by contrast, are shifted by the full forecast
 horizon, and `tests/test_features.py` proves it.
 
-**MAPE leads, but never alone.** MAPE is the industry lingua franca for load
+MAPE leads, but never alone. MAPE is the industry lingua franca for load
 forecasting, so it heads the leaderboard. It is reported beside RMSE and a separate
 peak-hour MAPE because MAPE alone hides cost asymmetry: a 500 MW miss at 3am and
 the same miss at 5pm during a heatwave are not the same event.
 
-**The LLM is never trusted.** Generated SQL runs through a read-only connection, a
+The LLM is never trusted. Generated SQL runs through a read-only connection, a
 single-statement rule, a keyword blocklist, a table allowlist and an enforced row
 cap before it touches the database, and the query is always shown to the user. See
 `tests/test_sql_guard.py` for the attack cases.
@@ -247,7 +248,7 @@ cap before it touches the database, and the query is always shown to the user. S
 
 ## Quickstart
 
-**Prerequisites:** Python 3.10-3.12 and a free
+Prerequisites: Python 3.10-3.12 and a free
 [EIA API key](https://www.eia.gov/opendata/register.php) (instant).
 Optionally a free [Groq key](https://console.groq.com/keys) for the AI agent.
 
@@ -357,12 +358,12 @@ check targets a specific domain failure mode.
 
 | Dimension | Checks |
 |---|---|
-| **Completeness** | Demand reported, no missing hours on the spine, weather joined, every BA present |
-| **Validity** | Demand strictly positive, no frozen telemetry, temperature physically plausible |
-| **Uniqueness** | The `(ba_code, period_utc)` grain is unique - catches DST fall-back duplicates |
-| **Consistency** | Hour-on-hour ramps bounded, referential integrity to both dimensions |
-| **Timeliness** | Warehouse holds data within the last 48 hours |
-| **Accuracy** | The EIA benchmark series is present, since every model is scored on it |
+| Completeness | Demand reported, no missing hours on the spine, weather joined, every BA present |
+| Validity | Demand strictly positive, no frozen telemetry, temperature physically plausible |
+| Uniqueness | The `(ba_code, period_utc)` grain is unique - catches DST fall-back duplicates |
+| Consistency | Hour-on-hour ramps bounded, referential integrity to both dimensions |
+| Timeliness | Warehouse holds data within the last 48 hours |
+| Accuracy | The EIA benchmark series is present, since every model is scored on it |
 
 Results persist to `dq_results` and `dq_scorecard`, so quality is tracked as a
 time series rather than a print statement. Critical failures halt the pipeline
@@ -376,7 +377,7 @@ before a bad model reaches the public site.
 pytest -v --cov=gridpulse
 ```
 
-The suite runs with **no network access and no API keys**, against a synthetic grid
+The suite runs with no network access and no API keys, against a synthetic grid
 built to mirror real physics: daily and weekly cycles, an annual temperature cycle,
 a V-shaped demand response and gaussian noise. Coverage includes the SQL security
 guard, temporal leakage audits on every feature family, metric correctness, and an
@@ -389,10 +390,11 @@ referential integrity.
 
 | Target | How |
 |---|---|
-| **Local** | `streamlit run app.py` after `gridpulse all` |
-| **Streamlit Community Cloud** | Point it at this repo and `app.py`. The root `requirements.txt` is deliberately light (11 packages, no Dagster/dbt/Airflow/PyTorch) so the app stays inside the free tier |
-| **Docker** | `docker compose up` runs the API and the dashboard together |
-| **Scheduled refresh** | `.github/workflows/refresh.yml` re-ingests, retrains and commits weekly |
+| Local | `streamlit run app.py` after `gridpulse all` |
+| Hugging Face Spaces | Runs the repository `Dockerfile` on port 7860, mirrored by `.github/workflows/sync-huggingface.yml` on every push to `main` |
+| Streamlit Community Cloud | Point it at this repo and `app.py`. The root `requirements.txt` is deliberately light (11 packages, no Dagster/dbt/Airflow/PyTorch) so the app stays inside the free tier |
+| Docker | `docker compose up` runs the API and the dashboard together |
+| Scheduled refresh | `.github/workflows/refresh.yml` re-ingests, retrains, regenerates the results table and commits weekly |
 
 The app ships with everything it needs committed: a 13 MB slim DuckDB artifact and
 the trained model files. It starts instantly with no warehouse dependency and no
