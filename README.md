@@ -69,22 +69,22 @@ on identical out-of-sample hours, with identical metrics.
 > Regenerate this table after training with `python scripts/update_readme.py`.
 
 <!-- RESULTS:START -->
-> ### 25.0% more accurate than the EIA's own day-ahead forecast
+> ### 24.1% more accurate than the EIA's own day-ahead forecast
 >
-> **LightGBM hybrid (+ EIA forecast as input)** reaches **2.771% MAPE** against the EIA's **3.696%**, measured over **25,927** out-of-sample hours across 12 balancing authorities.
+> **LightGBM hybrid (+ EIA forecast as input)** reaches **2.797% MAPE** against the EIA's **3.686%**, measured over **25,925** out-of-sample hours across 12 balancing authorities.
 >
 > Trained without ever seeing the test window. The EIA benchmark is the forecast the US government actually published and grid operators actually operated against.
 
 | Model | MAPE % | MAE (MW) | RMSE (MW) | R² | Peak-hour MAPE % | Skill vs EIA |
 |---|---|---|---|---|---|---|
-| **LightGBM hybrid** (+ EIA forecast as input) | 2.771 | 1,038 | 1,800 | 0.9964 | 3.466 | **+25.0%** |
-| **LightGBM** (global, quantile) | 3.676 | 1,379 | 2,323 | 0.9941 | 4.499 | **+0.6%** |
-| _EIA official forecast_ ⭐ | 3.696 | 1,366 | 2,411 | 0.9937 | 2.703 | - (benchmark) |
-| **Ensemble** (GBM + LSTM) | 4.510 | 1,515 | 2,358 | 0.9939 | 3.740 | -22.0% |
-| Seasonal naive (24h) | 5.676 | 1,904 | 3,146 | 0.9891 | 5.415 | -53.6% |
-| **LSTM** encoder | 5.936 | 1,825 | 2,774 | 0.9915 | 3.221 | -60.6% |
-| **Transformer** encoder | 8.053 | 2,926 | 4,443 | 0.9783 | 7.036 | -117.9% |
-| Weekly naive (168h) | 9.117 | 3,381 | 5,950 | 0.9611 | 12.594 | -146.7% |
+| **LightGBM hybrid** (+ EIA forecast as input) | 2.797 | 1,068 | 1,826 | 0.9964 | 3.483 | **+24.1%** |
+| **LightGBM** (global, quantile) | 3.683 | 1,395 | 2,330 | 0.9942 | 4.626 | **+0.1%** |
+| _EIA official forecast_ ⭐ | 3.686 | 1,383 | 2,442 | 0.9936 | 2.885 | - (benchmark) |
+| **Ensemble** (GBM + LSTM) | 4.670 | 1,659 | 2,598 | 0.9928 | 3.760 | -26.7% |
+| Seasonal naive (24h) | 5.657 | 1,922 | 3,179 | 0.9892 | 5.273 | -53.5% |
+| **LSTM** encoder | 6.191 | 2,093 | 3,311 | 0.9882 | 3.171 | -68.0% |
+| **Transformer** encoder | 6.577 | 2,425 | 3,632 | 0.9859 | 5.284 | -78.4% |
+| Weekly naive (168h) | 9.328 | 3,480 | 6,032 | 0.9610 | 12.734 | -153.1% |
 
 <sub>P10/P50/P90 quantile models are omitted above: they define the prediction interval rather than competing as point forecasts. Interval calibration is reported separately.</sub>
 <!-- RESULTS:END -->
