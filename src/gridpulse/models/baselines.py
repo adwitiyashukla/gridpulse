@@ -1,5 +1,3 @@
-"""Simple baselines to beat: seasonal naive, weekly naive and Holt-Winters."""
-
 from __future__ import annotations
 
 import logging
@@ -11,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 def seasonal_naive(frame: pd.DataFrame, season_hours: int = 24, target: str = "demand_mwh") -> pd.Series:
-    """Predict each hour as the observation ``season_hours`` earlier."""
     return frame.groupby("ba_code")[target].shift(season_hours)
 
 
@@ -20,7 +17,6 @@ def weekly_naive(frame: pd.DataFrame, target: str = "demand_mwh") -> pd.Series:
 
 
 def drift_naive(frame: pd.DataFrame, target: str = "demand_mwh") -> pd.Series:
-    """Weekly naive nudged by the recent week-on-week trend."""
     last_week = frame.groupby("ba_code")[target].shift(168)
     two_weeks = frame.groupby("ba_code")[target].shift(336)
     return last_week + 0.5 * (last_week - two_weeks)
@@ -29,11 +25,6 @@ def drift_naive(frame: pd.DataFrame, target: str = "demand_mwh") -> pd.Series:
 def holt_winters(
     train: pd.Series, horizon: int, seasonal_periods: int = 24
 ) -> np.ndarray:
-    """Fit Holt-Winters on one series and forecast ``horizon`` steps.
-
-    Falls back to the seasonal mean if statsmodels is unavailable or the fit fails
-    to converge, which it occasionally does on series with long flat stretches.
-    """
     try:
         from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
@@ -50,7 +41,7 @@ def holt_winters(
         ).fit(optimized=True)
         return np.asarray(model.forecast(horizon))
 
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Holt-Winters fell back to seasonal mean: %s", exc)
         tail = train.dropna().tail(seasonal_periods * 4)
         if tail.empty:
@@ -60,7 +51,6 @@ def holt_winters(
 
 
 def build_all_baselines(frame: pd.DataFrame, target: str = "demand_mwh") -> pd.DataFrame:
-    """Attach every naive baseline plus EIA's official forecast as columns."""
     out = frame.copy()
     out["pred_seasonal_naive"] = seasonal_naive(out, 24, target)
     out["pred_weekly_naive"] = weekly_naive(out, target)

@@ -1,5 +1,3 @@
-"""Data quality suite definition and execution."""
-
 from __future__ import annotations
 
 from gridpulse.quality.checks import CHECKS, Dimension, Severity
@@ -34,7 +32,6 @@ def test_every_check_declares_a_description():
 
 
 def test_every_check_returns_failed_and_total():
-    """The contract is one row with exactly the columns `failed` and `total`."""
     for check in CHECKS:
         lowered = check.sql.lower()
         assert "failed" in lowered, f"{check.name} does not select `failed`"

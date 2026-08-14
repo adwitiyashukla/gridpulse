@@ -1,5 +1,3 @@
-"""Forecast metric correctness."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -55,7 +53,6 @@ def test_coverage_matches_the_share_inside_the_interval():
 
 
 def test_pinball_loss_is_asymmetric():
-    """A P90 forecast should be punished harder for being too low than too high."""
     truth = np.array([100.0])
     too_low = metrics.pinball_loss(truth, np.array([90.0]), 0.9)
     too_high = metrics.pinball_loss(truth, np.array([110.0]), 0.9)

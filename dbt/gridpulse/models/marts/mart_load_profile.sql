@@ -1,7 +1,3 @@
--- Average hourly load shape by balancing authority, season and day type.
--- Normalising each profile by its own mean makes shapes comparable across
--- systems that differ by an order of magnitude in absolute size.
-
 with hourly as (
 
     select * from {{ ref('stg_demand_hourly') }}

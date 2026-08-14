@@ -1,4 +1,3 @@
-# GridPulse developer tasks.  Run `make help` for the list.
 .DEFAULT_GOAL := help
 .PHONY: help setup probe ingest build quality train anomalies export all \
         test lint format api app dagster dbt docker clean

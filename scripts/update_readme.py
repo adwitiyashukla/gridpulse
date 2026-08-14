@@ -1,11 +1,3 @@
-"""Regenerate the README results table from the trained model leaderboard.
-
-Keeping the headline number in sync with the artifacts by hand is how READMEs end
-up lying. Run this after ``gridpulse train``::
-
-    python scripts/update_readme.py
-"""
-
 from __future__ import annotations
 
 import json
@@ -26,7 +18,7 @@ PRETTY = {
     "lstm": "**LSTM** encoder",
     "transformer": "**Transformer** encoder",
     "ensemble": "**Ensemble** (GBM + LSTM)",
-    "eia_official": "_EIA official forecast_ ⭐",
+    "eia_official": "_EIA official forecast_ ",
     "seasonal_naive": "Seasonal naive (24h)",
     "weekly_naive": "Weekly naive (168h)",
     "drift_naive": "Drift naive",
@@ -38,7 +30,7 @@ QUANTILE_MODELS = {"gbm_p10", "gbm_p50", "gbm_p90"}
 
 def render_table(rows: list[dict]) -> str:
     lines = [
-        "| Model | MAPE % | MAE (MW) | RMSE (MW) | R² | Peak-hour MAPE % | Skill vs EIA |",
+        "| Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Skill vs EIA |",
         "|---|---|---|---|---|---|---|",
     ]
     for row in sorted(rows, key=lambda r: r.get("mape_pct", 999)):

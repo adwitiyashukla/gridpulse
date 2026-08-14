@@ -1,9 +1,3 @@
-"""Writes the small DuckDB file the public app ships with, about 13 MB.
-
-The full warehouse is 129 MB, which is too big for Git and for free hosting, so
-this keeps only a rolling window of what the website actually reads.
-"""
-
 from __future__ import annotations
 
 import json
@@ -21,7 +15,6 @@ EXPORT_WINDOW_DAYS = 400
 
 
 def export_for_app(window_days: int = EXPORT_WINDOW_DAYS, destination: Path | None = None) -> Path:
-    """Write the slim app database and its manifest. Returns the database path."""
     target = Path(destination) if destination else PATHS.gold / APP_DB_NAME
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():

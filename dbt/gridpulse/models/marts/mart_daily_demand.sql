@@ -1,7 +1,3 @@
--- Daily demand aggregate per balancing authority.
--- Load factor (mean / peak) is the headline efficiency metric utilities track:
--- a low load factor means expensive peaking capacity sits idle most of the day.
-
 with hourly as (
 
     select * from {{ ref('stg_demand_hourly') }}
@@ -28,7 +24,6 @@ select
     round(sum(heating_degrees) / 24, 2)             as heating_degree_days,
     round(sum(cooling_degrees) / 24, 2)             as cooling_degree_days,
 
-    -- Hour of the local day at which the system peaked.
     arg_max(hour_local, demand_mwh)                 as peak_hour_local
 
 from hourly

@@ -23,7 +23,7 @@ dbt docs serve --profiles-dir .   # opens a browsable diagram of how everything 
 | `mart_daily_demand` | region and day | Daily total, daily peak, load factor and degree days |
 | `mart_load_profile` | region, season, day type and hour | The average shape of a day, scaled so regions can be compared |
 | `mart_forecast_scorecard` | region and month | How accurate EIA is, and whether they tend to guess high or low |
-| `mart_temperature_response` | region, day type and 2°C band | The actual measured curve between temperature and demand |
+| `mart_temperature_response` | region, day type and 2C band | The actual measured curve between temperature and demand |
 | `mart_peak_events` | region, top 25 days | The busiest days, which are the ones capacity planning is based on |
 
 The tests check that no key columns are null and that there is only one row per

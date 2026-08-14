@@ -1,5 +1,3 @@
-"""Configuration and the balancing-authority registry."""
-
 from __future__ import annotations
 
 import pytest
@@ -17,7 +15,6 @@ def test_registry_is_populated():
 
 
 def test_every_ba_has_plausible_coordinates():
-    """Load centres must sit inside the continental US bounding box."""
     for code, ba in BALANCING_AUTHORITIES.items():
         assert 24 <= ba.latitude <= 50, f"{code} latitude out of range"
         assert -125 <= ba.longitude <= -66, f"{code} longitude out of range"
@@ -43,7 +40,6 @@ def test_unknown_ba_is_rejected(monkeypatch):
 
 
 def test_benchmark_measure_is_present():
-    """DF is the EIA's own forecast and the benchmark the project is built around."""
     assert "DF" in EIA_MEASURES
     assert "D" in EIA_MEASURES
 

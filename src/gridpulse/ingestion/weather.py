@@ -1,9 +1,3 @@
-"""Downloads weather from Open-Meteo, no API key needed.
-
-Joins the ERA5 archive, which lags about 5 days, to the forecast endpoint, which
-covers the gap and supplies tomorrow's weather. Overlapping hours use the archive.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -42,7 +36,6 @@ def read_bronze(ba_code: str) -> pd.DataFrame:
 
 
 def _flatten(payload: dict, ba: BalancingAuthority, source: str) -> pd.DataFrame:
-    """Open-Meteo returns column-oriented arrays; pivot them into tidy rows."""
     hourly = payload.get("hourly") or {}
     times = hourly.get("time") or []
     if not times:
@@ -101,7 +94,6 @@ async def _fetch_forecast(
 
 
 def _merge(*frames: pd.DataFrame) -> pd.DataFrame:
-    """Combine sources, preferring the archive where both cover the same hour."""
     populated = [f for f in frames if f is not None and not f.empty]
     if not populated:
         return pd.DataFrame()
@@ -161,7 +153,6 @@ async def _ingest_async(bas: list[BalancingAuthority], full_refresh: bool) -> di
 
 
 def ingest_weather(ba_codes: list[str] | None = None, full_refresh: bool = False) -> dict[str, int]:
-    """Extract hourly weather for every active BA's load centre into bronze."""
     PATHS.ensure()
     bas = active_bas()
     if ba_codes:

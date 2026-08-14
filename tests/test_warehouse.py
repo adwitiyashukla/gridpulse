@@ -1,9 +1,3 @@
-"""End-to-end warehouse build over synthetic bronze data.
-
-These are integration tests: they exercise the real DuckDB SQL that ships, against
-data whose correct answers are known by construction.
-"""
-
 from __future__ import annotations
 
 import duckdb
@@ -32,7 +26,6 @@ def test_fact_table_is_populated(con):
 
 
 def test_grain_is_unique(con):
-    """(ba_code, period_utc) is the declared grain and must be unique."""
     duplicates = con.execute(
         "SELECT count(*) FROM (SELECT ba_code, period_utc FROM fact_demand_hourly "
         "GROUP BY 1, 2 HAVING count(*) > 1)"
@@ -55,7 +48,6 @@ def test_weather_is_joined(con):
 
 
 def test_local_time_conversion_is_applied(con):
-    """period_local must differ from period_utc by the BA's UTC offset."""
     offsets = con.execute("""
         SELECT DISTINCT ba_code,
                date_diff('hour', period_local, period_utc AT TIME ZONE 'UTC') AS offset_hours
@@ -65,13 +57,6 @@ def test_local_time_conversion_is_applied(con):
 
 
 def test_hourly_spine_is_continuous(con):
-    """No hour may be missing between the first and last observation per BA.
-
-    Elapsed time is measured in epoch seconds rather than with ``date_diff``,
-    because calendar-based differencing is defined in terms of the session
-    timezone and would report daylight-saving transitions as gaps even when the
-    underlying UTC series is perfectly continuous.
-    """
     gaps = con.execute("""
         SELECT ba_code, period_utc, delta_hours FROM (
             SELECT ba_code, period_utc,

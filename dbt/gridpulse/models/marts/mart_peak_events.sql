@@ -1,7 +1,3 @@
--- The days each system came closest to its all-time peak.
--- These are the days capacity planning is built around, and the days a forecast
--- miss is most expensive.
-
 with daily as (
 
     select * from {{ ref('mart_daily_demand') }}

@@ -1,6 +1,3 @@
-"""One command for every stage: probe, ingest, build, quality, train, anomalies,
-export, or all of them in order."""
-
 from __future__ import annotations
 
 import argparse
@@ -118,7 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="gridpulse",
         description="GridPulse: US electricity grid demand intelligence platform.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
+        epilog="Stages: probe, ingest, build, quality, train, anomalies, export, all.",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="debug logging")
     parser.add_argument(
@@ -172,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nInterrupted.")
         return 130
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logging.getLogger("gridpulse").error("%s: %s", type(exc).__name__, exc, exc_info=args.verbose)
         return 1
 

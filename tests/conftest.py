@@ -1,5 +1,3 @@
-"""Shared fixtures. Every test runs without network access or API keys."""
-
 from __future__ import annotations
 
 import os
@@ -15,12 +13,6 @@ os.environ.setdefault("GRIDPULSE_BAS", "PJM,ERCO,CISO")
 
 @pytest.fixture(scope="session")
 def synthetic_grid() -> pd.DataFrame:
-    """A realistic synthetic hourly demand series for three balancing authorities.
-
-    Construction mirrors the real physics so downstream tests are meaningful:
-    a daily cycle, a weekly cycle, an annual temperature cycle, a V-shaped
-    demand response around the comfort balance point, and gaussian noise.
-    """
     rng = np.random.default_rng(42)
     periods = pd.date_range("2022-01-01", "2024-06-30 23:00", freq="h", tz="UTC")
     frames = []
@@ -56,7 +48,6 @@ def synthetic_grid() -> pd.DataFrame:
 
 @pytest.fixture(scope="session")
 def bronze_dir(tmp_path_factory, synthetic_grid: pd.DataFrame) -> Path:
-    """Write the synthetic series into a bronze layout the warehouse can read."""
     root = tmp_path_factory.mktemp("bronze")
     measures = {
         "D": "demand_mwh", "DF": "demand_forecast_mwh",
@@ -100,11 +91,6 @@ def bronze_dir(tmp_path_factory, synthetic_grid: pd.DataFrame) -> Path:
 
 @pytest.fixture(scope="session")
 def warehouse(bronze_dir: Path, tmp_path_factory):
-    """A fully built DuckDB warehouse over the synthetic bronze data.
-
-    Paths are patched at module level rather than via environment variables,
-    because the config dataclasses resolve their paths at import time.
-    """
     from gridpulse.config import Paths
     from gridpulse.warehouse import build as build_module
     from gridpulse.warehouse import duck as duck_module

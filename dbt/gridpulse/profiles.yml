@@ -1,5 +1,3 @@
-# dbt connects to the same DuckDB file the Python pipeline builds.
-# Run dbt from this directory:  dbt build --profiles-dir .
 gridpulse:
   target: dev
   outputs:

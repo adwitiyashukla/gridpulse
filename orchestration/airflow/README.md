@@ -32,10 +32,10 @@ airflow standalone
 ## Task graph
 
 ```
-eia_ingest ──────┐
-                 ├─► build_warehouse ──┬─► data_quality ──┬─► train_models ─────┐
-weather_ingest ──┘                     │                  │                     ├─► export_app
-                                       └─► dbt_marts      └─► detect_anomalies ─┘
+eia_ingest ------+
+                 +--> build_warehouse --+--> data_quality --+--> train_models -----+
+weather_ingest --+                      |                   |                      +--> export_app
+                                        +--> dbt_marts      +--> detect_anomalies -+
 ```
 
 Retries use exponential backoff, capped at 30 minutes. `data_quality` raises on a

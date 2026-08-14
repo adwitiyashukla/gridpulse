@@ -1,11 +1,3 @@
-"""The GridPulse pipeline as Dagster assets. Run with ``dagster dev -f`` this file.
-
-Do not add ``from __future__ import annotations`` here. It turns annotations into
-strings, and Dagster reads the annotation on ``context`` to decide what to inject,
-so the assets fail to load with a misleading error.
-"""
-
-
 import sys
 from pathlib import Path
 

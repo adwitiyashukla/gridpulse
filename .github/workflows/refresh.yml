@@ -1,14 +1,7 @@
 name: Scheduled data refresh
 
-# The production orchestrator for the public site. Pulls fresh EIA and weather
-# data, rebuilds the warehouse, validates it, retrains, and commits the updated
-# app artifact so the deployed Space serves current data.
-#
-# Requires the repository secret: EIA_API_KEY
-
 on:
   schedule:
-    # 07:00 UTC on Mondays. EIA publishes on a lag, so this captures a settled week.
     - cron: "0 7 * * 1"
   workflow_dispatch:
     inputs:
@@ -23,8 +16,6 @@ on:
 
 permissions:
   contents: write
-  # Needed to dispatch the Space sync at the end of the job. See that step for
-  # why the sync cannot simply trigger itself.
   actions: write
 
 jobs:
@@ -86,11 +77,6 @@ jobs:
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
         run: gridpulse export
 
-      # Retraining changes every metric the README quotes. Without this the
-      # published table silently drifts away from artifacts/leaderboard.json,
-      # and a README claiming accuracy the models no longer achieve is worse
-      # than no README at all. The script fails loudly if the leaderboard or
-      # the RESULTS markers are missing.
       - name: Regenerate the README results table
         run: python scripts/update_readme.py
 
@@ -98,7 +84,7 @@ jobs:
         id: commit
         run: |
           git config user.name  "Adwitiya Shukla"
-          git config user.email "shuklaaw@mail.uc.edu"
+          git config user.email "adwitiyashukla@users.noreply.github.com"
           git add -f data/gold/gridpulse_app.duckdb artifacts/ README.md
           if git diff --staged --quiet; then
             echo "Nothing changed."
@@ -109,18 +95,6 @@ jobs:
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # GitHub deliberately does not start a workflow from a push made with the
-      # default GITHUB_TOKEN, which is what prevents a workflow from triggering
-      # itself forever. The consequence here is that the commit above redeploys
-      # Streamlit, which reads GitHub directly, but never fires the Hugging Face
-      # sync. The two public deployments would then drift apart a little more
-      # every week, with no error anywhere to say so.
-      #
-      # workflow_dispatch is the documented exception to that rule: it does
-      # start a run even when dispatched with GITHUB_TOKEN. So the sync is
-      # requested explicitly rather than left to a push event that will not
-      # arrive. The dispatched run checks out main after this commit landed, so
-      # it mirrors the refreshed artifacts rather than the previous ones.
       - name: Mirror the refreshed repository to the Space
         if: steps.commit.outputs.pushed == 'true'
         env:

@@ -1,9 +1,3 @@
-# Local stack: the API and the dashboard side by side.
-#   docker compose up
-#
-# The image defaults to the Streamlit app on port 7860 (the Hugging Face Spaces
-# convention). Both services override PORT explicitly so local ports stay
-# familiar and the two containers do not collide.
 services:
   api:
     build: .

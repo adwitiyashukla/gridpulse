@@ -1,5 +1,3 @@
-"""One LightGBM model across all 12 regions, plus P10/P50/P90 prediction bands."""
-
 from __future__ import annotations
 
 import json
@@ -20,7 +18,6 @@ CATEGORICAL = ["ba_code"]
 
 @dataclass
 class BATargetScaler:
-    """Scales demand separately for each region so they can share one model."""
 
     stats: dict[str, tuple[float, float]]
     global_mean: float
@@ -28,7 +25,6 @@ class BATargetScaler:
 
     @classmethod
     def fit(cls, frame: pd.DataFrame) -> BATargetScaler:
-        """Median and IQR per region, so one bad reading cannot skew the scaling."""
         grouped = frame.groupby("ba_code")[TARGET]
         centre = grouped.median()
         spread = (grouped.quantile(0.75) - grouped.quantile(0.25)) / 1.349
@@ -83,12 +79,6 @@ class BATargetScaler:
 
 
 def _base_params(quick: bool) -> dict:
-    """Hyperparameters tuned for a constrained CPU rather than a GPU cluster.
-
-    ``num_leaves`` is kept modest and ``feature_fraction`` low, which costs a little
-    accuracy but keeps training to seconds on a laptop and keeps the model small
-    enough to load inside a free-tier hosting container.
-    """
     return {
         "objective": "regression",
         "metric": "mae",
@@ -157,11 +147,6 @@ class TrainedGBM:
         )
 
     def predict(self, frame: pd.DataFrame) -> pd.DataFrame:
-        """Point and quantile predictions, returned in megawatthours.
-
-        The models operate on a per-BA z-score, so every output is inverted back
-        to physical units here rather than leaving that to the caller.
-        """
         matrix = prepare_matrix(frame, self.ba_categories, self.feature_names)
         ba_codes = frame["ba_code"]
 
@@ -189,7 +174,6 @@ class TrainedGBM:
 def prepare_matrix(
     frame: pd.DataFrame, ba_categories: list[str], feature_names: list[str]
 ) -> pd.DataFrame:
-    """Assemble the model matrix with a stable categorical encoding for ``ba_code``."""
     matrix = frame[feature_names].copy()
     matrix["ba_code"] = pd.Categorical(frame["ba_code"], categories=ba_categories)
     return matrix
@@ -202,14 +186,6 @@ def train_gbm(
     quantiles: tuple[float, ...] = QUANTILES,
     features: list[str] | None = None,
 ) -> TrainedGBM:
-    """Fit the point model plus one model per quantile.
-
-    Parameters
-    ----------
-    features
-        Override the feature set. Used to train a hybrid variant that additionally
-        consumes the EIA's published day-ahead forecast as an input.
-    """
     import lightgbm as lgb
 
     ba_categories = sorted(pd.concat([train["ba_code"], valid["ba_code"]]).unique().tolist())

@@ -1,18 +1,3 @@
-"""Airflow mirror of the GridPulse Dagster asset graph.
-
-Dagster is the primary orchestrator for this project (asset-based lineage suits a
-lakehouse, and it is far lighter on constrained hardware). This DAG exists because
-a large share of production data platforms are standardised on Airflow, and the
-same pipeline should be portable to either.
-
-The task graph is identical to the Dagster asset graph:
-
-    eia_ingest ──┐
-                 ├─► build_warehouse ──┬─► data_quality ──┬─► train_models ──┐
-    weather_ingest┘                    │                  │                  ├─► export_app
-                                       ├─► dbt_marts      └─► detect_anomalies┘
-"""
-
 from __future__ import annotations
 
 import sys
@@ -45,7 +30,7 @@ DEFAULT_ARGS = {
     catchup=False,
     max_active_runs=1,
     tags=["gridpulse", "energy", "forecasting", "elt"],
-    doc_md=__doc__,
+    doc_md="Airflow mirror of the GridPulse Dagster asset graph.",
 )
 def gridpulse_daily_refresh():
 

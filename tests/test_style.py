@@ -1,5 +1,3 @@
-"""Project style guarantees enforced by the test suite."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -32,7 +30,6 @@ def _text_files() -> list[Path]:
 
 @pytest.mark.parametrize("path", _text_files(), ids=lambda p: p.name)
 def test_no_unicode_dashes(path: Path):
-    """Only the ASCII hyphen is permitted anywhere in the project."""
     try:
         content = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:

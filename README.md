@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ GridPulse
+# GridPulse
 
 **Day-ahead electricity demand forecasting for the US power grid -
 benchmarked against the EIA's own published forecast.**
@@ -14,8 +14,8 @@ benchmarked against the EIA's own published forecast.**
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-[Live app](#live-app) · [Results](#results) · [Architecture](#architecture) ·
-[Quickstart](#quickstart) · [REST API](#rest-api) ·
+[Live app](#live-app), [Results](#results), [Architecture](#architecture),
+[Quickstart](#quickstart), [REST API](#rest-api),
 [Engineering log](docs/ENGINEERING_LOG.md)
 
 </div>
@@ -77,11 +77,11 @@ test hours with the same metrics, so anyone can check whether the numbers hold u
 >
 > Trained without ever seeing the test window. The EIA benchmark is the forecast the US government actually published and grid operators actually operated against.
 
-| Model | MAPE % | MAE (MW) | RMSE (MW) | R² | Peak-hour MAPE % | Skill vs EIA |
+| Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Skill vs EIA |
 |---|---|---|---|---|---|---|
 | **LightGBM hybrid** (+ EIA forecast as input) | 2.797 | 1,068 | 1,826 | 0.9964 | 3.483 | **+24.1%** |
 | **LightGBM** (global, quantile) | 3.683 | 1,395 | 2,330 | 0.9942 | 4.626 | **+0.1%** |
-| _EIA official forecast_ ⭐ | 3.686 | 1,383 | 2,442 | 0.9936 | 2.885 | - (benchmark) |
+| _EIA official forecast_ | 3.686 | 1,383 | 2,442 | 0.9936 | 2.885 | - (benchmark) |
 | **Ensemble** (GBM + LSTM) | 4.670 | 1,659 | 2,598 | 0.9928 | 3.760 | -26.7% |
 | Seasonal naive (24h) | 5.657 | 1,922 | 3,179 | 0.9892 | 5.273 | -53.5% |
 | **LSTM** encoder | 6.191 | 2,093 | 3,311 | 0.9882 | 3.171 | -68.0% |
@@ -150,32 +150,32 @@ whole story in the repo on purpose.
 
 ```mermaid
 flowchart TD
-    subgraph EXTRACT["① Extract"]
-        A1["EIA-930 API v2<br/><i>demand · EIA forecast<br/>generation · interchange</i>"]
+    subgraph EXTRACT["1. Extract"]
+        A1["EIA-930 API v2<br/><i>demand, EIA forecast<br/>generation, interchange</i>"]
         A2["Open-Meteo<br/><i>ERA5 archive + forecast</i>"]
     end
 
-    subgraph LAKE["② Lakehouse"]
+    subgraph LAKE["2. Lakehouse"]
         B1["<b>BRONZE</b><br/>Parquet, partitioned<br/>immutable, watermarked"]
-        B2["<b>SILVER</b><br/>measures pivoted · weather joined<br/>hourly spine · local civil time<br/>quality flags"]
-        B3["<b>GOLD</b> - DuckDB star schema<br/>dim_ba · dim_date<br/>fact_demand_hourly<br/>fact_forecast_accuracy"]
+        B2["<b>SILVER</b><br/>measures pivoted, weather joined<br/>hourly spine, local civil time<br/>quality flags"]
+        B3["<b>GOLD</b> - DuckDB star schema<br/>dim_ba, dim_date<br/>fact_demand_hourly<br/>fact_forecast_accuracy"]
     end
 
-    subgraph PROCESS["③ Process"]
+    subgraph PROCESS["3. Process"]
         C1["dbt marts<br/><i>5 models, 20+ tests</i>"]
         C2["Data quality<br/><i>16 checks, 6 dimensions</i>"]
         C3["Feature store<br/><i>40 engineered features</i>"]
         C4["Anomaly detection<br/><i>3-detector consensus</i>"]
     end
 
-    subgraph ML["④ Models"]
-        D1["Baselines<br/>seasonal · weekly naive"]
+    subgraph ML["4. Models"]
+        D1["Baselines<br/>seasonal, weekly naive"]
         D2["LightGBM<br/>global + P10/P50/P90"]
         D3["PyTorch LSTM<br/>known future covariates"]
         D4["Transformer<br/>attention encoder"]
     end
 
-    subgraph SERVE["⑤ Serve"]
+    subgraph SERVE["5. Serve"]
         E1["FastAPI<br/><i>OpenAPI documented</i>"]
         E2["Streamlit app<br/><i>public website</i>"]
         E3["LLM agent<br/><i>guarded text-to-SQL</i>"]
@@ -190,7 +190,7 @@ flowchart TD
     B3 --> E3
     C4 --> E2
 
-    ORCH["<b>Orchestration</b><br/>Dagster assets · Airflow DAG mirror<br/>GitHub Actions scheduled refresh"]
+    ORCH["<b>Orchestration</b><br/>Dagster assets, Airflow DAG mirror<br/>GitHub Actions scheduled refresh"]
     ORCH -.governs.-> LAKE
     ORCH -.governs.-> PROCESS
     ORCH -.governs.-> ML
@@ -426,7 +426,7 @@ with no setup.
 | Downloading data | `httpx` with async requests, retries and saved progress markers |
 | Storage | Parquet files in bronze/silver/gold layers, DuckDB warehouse |
 | Transformations | SQL and dbt (`dbt-duckdb`) |
-| Scheduling | Dagster · Apache Airflow · GitHub Actions |
+| Scheduling | Dagster, Apache Airflow, GitHub Actions |
 | Machine learning | LightGBM, PyTorch, scikit-learn, statsmodels |
 | Experiment tracking | MLflow |
 | Serving | FastAPI, Streamlit, Docker |
@@ -460,5 +460,5 @@ with no setup.
 MIT - see [LICENSE](LICENSE).
 
 <div align="center">
-<sub>Built by <b>Adwitiya Shukla</b> · Data courtesy of the US Energy Information Administration and Open-Meteo</sub>
+<sub>Built by <b>Adwitiya Shukla</b>, Data courtesy of the US Energy Information Administration and Open-Meteo</sub>
 </div>

@@ -106,7 +106,7 @@ faster, and an epoch dropped to roughly 20 seconds. In `models/deep.py`.
 ## 7. Forty bad readings that wrecked the model
 
 **What happened.** LightGBM stopped training after only **6 trees**. The final
-error was 53.9% MAPE with an R² of -131, which is worse than guessing. It also
+error was 53.9% MAPE with an R2 of -131, which is worse than guessing. It also
 thought the day of year and cloud cover mattered more than yesterday's demand at
 the same hour, which makes no sense for predicting electricity demand.
 
@@ -136,7 +136,7 @@ broke the scaling, and the broken scaling broke every prediction for those regio
 - Excluded impossible readings from training (anything outside 0.2x to 5x that region's median).
 - Added two new **critical** quality checks: one for values that are physically impossible, and one that fails if any region's standard deviation is bigger than its mean.
 
-**Result.** MAPE went from 53.9% to **3.68%**, and R² from -131 to **0.994**.
+**Result.** MAPE went from 53.9% to **3.68%**, and R2 from -131 to **0.994**.
 
 **What I actually learned.** My quality suite had 13 checks and all 13 passed. It
 checked that demand was never *below* zero, and it never occurred to me to check

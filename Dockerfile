@@ -1,13 +1,3 @@
-# Single image serving either the Streamlit dashboard or the FastAPI service.
-#
-#   Hugging Face Space : uses the defaults below (Streamlit on port 7860)
-#   Local dashboard    : docker run -p 7860:7860 gridpulse
-#   Local API          : docker run -p 8000:8000 -e GRIDPULSE_SERVICE=api -e PORT=8000 gridpulse
-#
-# Port 7860 is the Hugging Face Spaces convention and is declared as `app_port`
-# in the Space README front matter. Defaulting to it here means the Space needs
-# no Docker-specific overrides.
-
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -18,20 +8,13 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=7860 \
     HOME=/home/gridpulse
 
-# libgomp1 is required by LightGBM. curl is used by the healthcheck.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends build-essential curl libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
-# Create the unprivileged user first. Hugging Face Spaces expect the container
-# to run as UID 1000 with a writable home directory, because Streamlit writes
-# its config and cache under $HOME/.streamlit.
 RUN useradd --create-home --uid 1000 gridpulse
 WORKDIR /app
 
-# Dependencies before source, so the layer caches across code changes.
-# requirements.txt is deliberately the light app-only set: no Dagster, dbt,
-# Airflow, PyTorch or MLflow, none of which the served app needs.
 COPY --chown=gridpulse:gridpulse requirements.txt ./
 RUN pip install -r requirements.txt \
  && pip install fastapi==0.115.6 "uvicorn[standard]==0.34.0"

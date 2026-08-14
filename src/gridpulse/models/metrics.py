@@ -1,5 +1,3 @@
-"""Forecast accuracy metrics: MAPE, sMAPE, MAE, RMSE, R2, pinball loss and skill."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -14,7 +12,6 @@ def _clean(y_true, y_pred) -> tuple[np.ndarray, np.ndarray]:
 
 
 def mape(y_true, y_pred) -> float:
-    """Mean absolute percentage error."""
     true, pred = _clean(y_true, y_pred)
     if true.size == 0:
         return float("nan")
@@ -22,7 +19,6 @@ def mape(y_true, y_pred) -> float:
 
 
 def smape(y_true, y_pred) -> float:
-    """Symmetric MAPE; bounded and does not explode near zero."""
     true, pred = _clean(y_true, y_pred)
     if true.size == 0:
         return float("nan")
@@ -50,7 +46,6 @@ def r2(y_true, y_pred) -> float:
 
 
 def peak_hour_mape(frame: pd.DataFrame, actual: str, predicted: str) -> float:
-    """MAPE calculated only on the busiest hour of each day."""
     if frame.empty:
         return float("nan")
     peaks = frame.loc[frame.groupby(frame["period_utc"].dt.date)[actual].idxmax()]
@@ -58,7 +53,6 @@ def peak_hour_mape(frame: pd.DataFrame, actual: str, predicted: str) -> float:
 
 
 def pinball_loss(y_true, y_pred, quantile: float) -> float:
-    """Pinball loss, which is the right way to score a quantile prediction."""
     true, pred = _clean(y_true, y_pred)
     if true.size == 0:
         return float("nan")
@@ -67,11 +61,6 @@ def pinball_loss(y_true, y_pred, quantile: float) -> float:
 
 
 def coverage(y_true, lower, upper) -> float:
-    """Share of actuals falling inside the predicted interval.
-
-    A well-calibrated 80 percent interval should contain roughly 80 percent of
-    outcomes. Much higher means the interval is uselessly wide.
-    """
     true = np.asarray(y_true, dtype=float)
     lo = np.asarray(lower, dtype=float)
     hi = np.asarray(upper, dtype=float)
@@ -82,12 +71,6 @@ def coverage(y_true, lower, upper) -> float:
 
 
 def evaluate_forecast(y_true, y_pred, label: str = "model") -> dict:
-    """Standard metric bundle for one model on one dataset.
-
-    ``n_obs`` counts the rows the metrics were actually computed on, after
-    dropping non-finite and non-positive actuals. Reporting the raw input length
-    here would overstate the sample behind every other number in the bundle.
-    """
     scored, _ = _clean(y_true, y_pred)
     return {
         "model": label,
@@ -101,12 +84,6 @@ def evaluate_forecast(y_true, y_pred, label: str = "model") -> dict:
 
 
 def skill_vs_benchmark(model_mape: float, benchmark_mape: float) -> float:
-    """Percentage improvement in MAPE over a benchmark.
-
-    Positive means the model beats the benchmark. This is the headline number:
-    ``skill_vs_benchmark(1.62, 2.14)`` -> ``24.3`` reads as "24 percent more
-    accurate than EIA's own published day-ahead forecast".
-    """
     if not np.isfinite(model_mape) or not np.isfinite(benchmark_mape) or benchmark_mape == 0:
         return float("nan")
     return round((benchmark_mape - model_mape) / benchmark_mape * 100, 2)

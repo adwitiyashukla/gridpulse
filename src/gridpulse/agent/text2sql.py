@@ -1,10 +1,3 @@
-"""Turns plain English questions into DuckDB SQL, behind six safety checks.
-
-Read-only connection, one statement only, SELECT or WITH only, a banned keyword
-list, a table allowlist, and a forced LIMIT. The generated SQL is always returned
-alongside the answer.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -68,7 +61,7 @@ A: SELECT round(temperature_2m) AS temp_c, round(avg(demand_mwh)) AS avg_demand_
 
 
 class SQLGuardError(RuntimeError):
-    """Raised when generated SQL violates a safety rule."""
+    pass
 
 
 @dataclass
@@ -96,7 +89,6 @@ def _strip_comments(sql: str) -> str:
 
 
 def guard_sql(raw: str, allowed_tables: set[str] | None = None) -> str:
-    """Validate and normalise model-generated SQL, or raise :class:`SQLGuardError`."""
     allowed = allowed_tables if allowed_tables is not None else ALLOWED_TABLES
     sql = _strip_fences(raw)
     if not sql:
@@ -136,7 +128,6 @@ def guard_sql(raw: str, allowed_tables: set[str] | None = None) -> str:
 
 
 def introspect_schema(database=None, tables: set[str] | None = None) -> str:
-    """Render a compact schema description for the prompt."""
     wanted = tables or ALLOWED_TABLES
     lines: list[str] = []
     with connect(database, read_only=True) as con:
@@ -157,7 +148,6 @@ def introspect_schema(database=None, tables: set[str] | None = None) -> str:
 
 
 class GridAgent:
-    """Question in, validated SQL and a DataFrame out."""
 
     def __init__(self, database=None, model: str | None = None):
         self.database = database or (PATHS.gold / "gridpulse_app.duckdb"
@@ -200,7 +190,6 @@ class GridAgent:
         return response.choices[0].message.content or ""
 
     def summarise(self, question: str, sql: str, data: pd.DataFrame) -> str:
-        """Two-sentence plain-English reading of the result set."""
         try:
             preview = data.head(20).to_markdown(index=False)
             response = self._get_client().chat.completions.create(
@@ -220,12 +209,11 @@ class GridAgent:
                 max_tokens=200,
             )
             return (response.choices[0].message.content or "").strip()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Summary generation failed: %s", exc)
             return ""
 
     def ask(self, question: str, summarise: bool = True) -> AgentAnswer:
-        """Full round trip with guardrails and a single self-repair retry."""
         if not self.available:
             return AgentAnswer(
                 question, "", pd.DataFrame(),
@@ -265,7 +253,7 @@ class GridAgent:
 
         except SQLGuardError as exc:
             return AgentAnswer(question, sql, pd.DataFrame(), warnings=warnings, error=f"Blocked by SQL guard: {exc}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Agent failed: %s", exc)
             return AgentAnswer(question, sql, pd.DataFrame(), warnings=warnings, error=str(exc)[:400])
 

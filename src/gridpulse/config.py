@@ -1,5 +1,3 @@
-"""Settings, file paths and the list of 12 balancing authorities."""
-
 from __future__ import annotations
 
 import os
@@ -10,7 +8,7 @@ try:
     from dotenv import load_dotenv
 
     load_dotenv()
-except ImportError:  # pragma: no cover
+except ImportError:
     pass
 
 
@@ -29,8 +27,6 @@ def _resolve(p: str) -> Path:
 
 @dataclass(frozen=True)
 class BalancingAuthority:
-    """A region, with coordinates pointing at its biggest city rather than its
-    geographic centre, since demand follows the weather where people live."""
 
     code: str
     name: str
@@ -65,7 +61,6 @@ BALANCING_AUTHORITIES: dict[str, BalancingAuthority] = {
 
 
 def active_bas() -> list[BalancingAuthority]:
-    """Balancing authorities selected via ``GRIDPULSE_BAS``, in registry order."""
     requested = [c.strip().upper() for c in _env("GRIDPULSE_BAS", ",".join(BALANCING_AUTHORITIES)).split(",") if c.strip()]
     unknown = [c for c in requested if c not in BALANCING_AUTHORITIES]
     if unknown:

@@ -1,9 +1,10 @@
 # Deployment guide
 
 ```
-                                       ┌── Streamlit Cloud ──► gridpulse-ai.streamlit.app
-   local laptop  ──push──►  GitHub  ───┤
-   (full pipeline)     (source of truth)└── GitHub Actions ───► HF Docker Space
+                                      +-- Streamlit Cloud --> gridpulse-ai.streamlit.app
+   local laptop  --push-->  GitHub  --+
+   (full pipeline)    (source of truth)
+                                      +-- GitHub Actions --> HF Docker Space
 ```
 
 One commit, two public deployments, both updated automatically on push.
@@ -13,7 +14,7 @@ One commit, two public deployments, both updated automatically on push.
 ## 1. Local
 
 ```powershell
-cd C:\Users\HP\Desktop\ElectricityForecaster
+cd gridpulse
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
@@ -76,7 +77,7 @@ git push
 
 ### Repository secrets
 
-**Settings → Secrets and variables → Actions**
+**Settings, Secrets and variables, Actions**
 
 | Type | Name | What it is for |
 |---|---|---|

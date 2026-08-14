@@ -1,6 +1,3 @@
--- Staging view over the gold fact built by the Python pipeline.
--- Adds derived measures every downstream mart needs, so the logic lives once.
-
 with source as (
 
     select * from {{ source('gridpulse', 'fact_demand_hourly') }}
@@ -24,12 +21,9 @@ enriched as (
         cloud_cover,
         wind_speed_10m,
 
-        -- Heating and cooling degrees split the V-shaped demand/temperature
-        -- response into two monotonic limbs.
         greatest({{ var('balance_point_c') }} - temperature_2m, 0) as heating_degrees,
         greatest(temperature_2m - {{ var('balance_point_c') }}, 0) as cooling_degrees,
 
-        -- Net generation minus demand is the system's surplus position.
         net_generation_mwh - demand_mwh                             as generation_surplus_mwh,
 
         is_weekend,

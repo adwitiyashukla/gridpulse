@@ -9,7 +9,7 @@ description = "Vertical AI data platform for US electricity grid demand intellig
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = { text = "MIT" }
-authors = [{ name = "Adwitiya Shukla", email = "shuklaaw@mail.uc.edu" }]
+authors = [{ name = "Adwitiya Shukla" }]
 keywords = ["data-engineering", "energy", "forecasting", "duckdb", "dagster", "dbt", "mlops"]
 urls = { Homepage = "https://github.com/adwitiyashukla/gridpulse", Demo = "https://huggingface.co/spaces/adwitiyashukla/gridpulse" }
 
@@ -27,6 +27,16 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
 ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"app.py" = ["E402"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "except ImportError",
+    "raise ImportError",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,6 +1,3 @@
-"""Sixteen data quality checks, scored across six categories and saved to the
-warehouse so quality can be tracked over time rather than only printed."""
-
 from __future__ import annotations
 
 import logging
@@ -32,8 +29,6 @@ class Dimension(str, Enum):
 
 @dataclass(frozen=True)
 class Check:
-    """One check. Its SQL returns ``failed`` and ``total``, and it passes when
-    ``failed / total`` is within the threshold."""
 
     name: str
     dimension: Dimension
@@ -68,14 +63,12 @@ class QualityReport:
 
     @property
     def passed(self) -> bool:
-        """The suite passes when no CRITICAL check has failed."""
         return not any(
             r.check.severity is Severity.CRITICAL and not r.passed for r in self.results
         )
 
     @property
     def score(self) -> float:
-        """Share of checks passing, weighted so critical checks count triple."""
         weights = {Severity.CRITICAL: 3.0, Severity.WARNING: 1.0, Severity.INFO: 0.5}
         total = sum(weights[r.check.severity] for r in self.results)
         earned = sum(weights[r.check.severity] for r in self.results if r.passed)
@@ -298,7 +291,6 @@ CHECKS: list[Check] = [
 
 
 def run_quality_suite(persist: bool = True, database=None) -> QualityReport:
-    """Run every check. ``report.passed`` is False if any critical one failed."""
     report = QualityReport()
 
     with connect(database, read_only=not persist) as con:
@@ -309,7 +301,7 @@ def run_quality_suite(persist: bool = True, database=None) -> QualityReport:
             try:
                 row = con.execute(check.sql).fetchone()
                 result = CheckResult(check, int(row[0] or 0), int(row[1] or 0))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 result = CheckResult(check, 0, 0, error=str(exc)[:300])
             report.results.append(result)
 

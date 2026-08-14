@@ -1,9 +1,3 @@
-"""Builds the 40 model features: calendar, lags, rolling stats and weather.
-
-Everything derived from past demand is shifted back by the full forecast horizon,
-so no feature can see anything that was not available at prediction time.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -43,7 +37,6 @@ TARGET = "demand_mwh"
 
 
 def load_modelling_frame(ba_codes: list[str] | None = None) -> pd.DataFrame:
-    """Pull the gold fact table into memory for feature construction."""
     where = ""
     if ba_codes:
         codes = ", ".join(f"'{c.upper()}'" for c in ba_codes)
@@ -68,7 +61,6 @@ def load_modelling_frame(ba_codes: list[str] | None = None) -> pd.DataFrame:
 
 
 def flag_implausible_demand(frame: pd.DataFrame, target: str = TARGET) -> pd.Series:
-    """True where demand is impossible compared to that region's own median."""
     median = frame.groupby("ba_code")[target].transform("median")
     return (frame[target] < median * DEMAND_PLAUSIBLE_LOWER) | (
         frame[target] > median * DEMAND_PLAUSIBLE_UPPER
@@ -82,7 +74,6 @@ def _cyclical(frame: pd.DataFrame, column: pd.Series, period: int, prefix: str) 
 
 
 def _engineer_one_ba(frame: pd.DataFrame) -> pd.DataFrame:
-    """Build features for a single BA. Assumes the frame is sorted by period."""
     out = frame.sort_values("period_utc").copy()
 
     _cyclical(out, out["hour_local"], 24, "hour")
@@ -126,11 +117,6 @@ def build_features(
     ba_codes: list[str] | None = None,
     dropna_target: bool = True,
 ) -> pd.DataFrame:
-    """Build the full feature table the models train on.
-
-    Set ``dropna_target=False`` when building features for future hours, where
-    there is no actual demand to compare against yet.
-    """
     source = load_modelling_frame(ba_codes) if frame is None else frame
 
     engineered = pd.concat(
@@ -171,7 +157,6 @@ def build_features(
 def chronological_split(
     frame: pd.DataFrame, test_days: int = 90, valid_days: int = 60
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Split by date only, never randomly, so the model cannot see the future."""
     cutoff_test = frame["period_utc"].max() - pd.Timedelta(days=test_days)
     cutoff_valid = cutoff_test - pd.Timedelta(days=valid_days)
 

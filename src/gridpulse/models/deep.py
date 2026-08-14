@@ -1,5 +1,3 @@
-"""PyTorch LSTM and Transformer forecasters, sized to train on a laptop CPU."""
-
 from __future__ import annotations
 
 import json
@@ -46,7 +44,7 @@ def _torch():
     try:
         import torch
         return torch
-    except ImportError as exc:  # pragma: no cover
+    except ImportError as exc:
         raise ImportError(
             "PyTorch is required for the deep models. Install with:\n"
             "  pip install torch --index-url https://download.pytorch.org/whl/cpu"
@@ -54,7 +52,6 @@ def _torch():
 
 
 class WindowDataset:
-    """Lazy sliding-window dataset over one BA's contiguous history."""
 
     def __init__(
         self,
@@ -91,7 +88,6 @@ class WindowDataset:
 
 
 class ConcatDataset:
-    """Chain several per-BA datasets without copying their arrays."""
 
     def __init__(self, datasets: list[WindowDataset]):
         self.datasets = datasets
@@ -181,7 +177,6 @@ def build_transformer(
 
 @dataclass
 class Scaler:
-    """Per-channel standardisation. Statistics come from training data only."""
 
     mean: np.ndarray
     std: np.ndarray
@@ -206,13 +201,11 @@ class Scaler:
 
 @dataclass
 class TargetScaler:
-    """Scales demand per region, so the biggest regions do not dominate training."""
 
     stats: dict[str, tuple[float, float]]
 
     @classmethod
     def fit(cls, frame: pd.DataFrame) -> TargetScaler:
-        """Median and IQR per region, so one bad reading cannot skew the scaling."""
         grouped = frame.groupby("ba_code")[TARGET]
         centre = grouped.median()
         spread = (grouped.quantile(0.75) - grouped.quantile(0.25)) / 1.349
@@ -242,7 +235,6 @@ class TargetScaler:
 
 @dataclass
 class SeriesBundle:
-    """Everything needed to build windows for a single balancing authority."""
 
     ba_code: str
     past: np.ndarray
@@ -278,11 +270,6 @@ def split_windows(
     train_stride: int = TRAIN_STRIDE,
     test_stride: int = TEST_STRIDE,
 ) -> tuple[ConcatDataset, ConcatDataset, list[tuple[SeriesBundle, np.ndarray]]]:
-    """Put each training window into train, validation or test by its date.
-
-    A window only counts as test if all 24 forecast hours fall in the test period,
-    so nothing the model saw during training leaks into the score.
-    """
     train_sets, valid_sets, test_specs = [], [], []
 
     for bundle in bundles:
@@ -311,7 +298,6 @@ def split_windows(
 
 
 class _SubsetWindows(WindowDataset):
-    """A WindowDataset restricted to an explicit list of window start indices."""
 
     def __init__(self, bundle: SeriesBundle, indices: np.ndarray):
         self.bundle = bundle
@@ -403,7 +389,6 @@ def train_deep(
     architecture: str = "lstm",
     quick: bool = False,
 ) -> tuple[TrainedDeepModel, pd.DataFrame]:
-    """Train one deep model and return it alongside out-of-sample test predictions."""
     torch = _torch()
     from torch.utils.data import DataLoader
 
@@ -498,7 +483,6 @@ def train_deep(
 
 
 def _predict_test(model, test_specs, target_scaler: TargetScaler, batch_size: int = 256) -> pd.DataFrame:
-    """Predict every test window, averaging where windows overlap the same hour."""
     torch = _torch()
     model.eval()
     rows = []

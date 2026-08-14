@@ -1,10 +1,3 @@
-"""Security tests for the LLM SQL guard.
-
-This is the highest-risk surface in the project: text from a language model is
-executed against a database. These tests assert the guard blocks the obvious
-attacks and, equally importantly, does not block legitimate analytics.
-"""
-
 from __future__ import annotations
 
 import pytest
@@ -79,6 +72,5 @@ class TestBlocksAttacks:
             guard_sql("   ")
 
     def test_comment_hidden_payload_is_neutralised(self):
-        """A DELETE hidden behind a comment must not survive into the executed SQL."""
         result = guard_sql("SELECT * FROM dim_ba -- ; DELETE FROM dim_ba")
         assert "delete" not in result.lower()

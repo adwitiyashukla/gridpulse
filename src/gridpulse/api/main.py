@@ -1,5 +1,3 @@
-"""REST API over the warehouse and models. Docs at /docs when the server runs."""
-
 from __future__ import annotations
 
 import logging
@@ -42,7 +40,7 @@ def _query(sql: str, params: list | None = None):
     try:
         with connect(_database(), read_only=True) as con:
             return con.execute(sql, params or []).df()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Warehouse unavailable: {exc}") from exc
 
 
@@ -85,7 +83,6 @@ def health() -> HealthResponse:
 
 @app.get("/balancing-authorities", tags=["reference"])
 def list_bas() -> list[dict[str, Any]]:
-    """Every balancing authority the platform covers."""
     return [
         {
             "code": ba.code, "name": ba.name, "region": ba.region,
@@ -101,7 +98,6 @@ def demand(
     ba_code: str,
     hours: int = Query(168, ge=1, le=8760, description="How many recent hours to return"),
 ) -> dict[str, Any]:
-    """Recent observed demand, weather and EIA's forecast for one BA."""
     code = ba_code.upper()
     if code not in BALANCING_AUTHORITIES:
         raise HTTPException(404, f"Unknown balancing authority '{ba_code}'")
@@ -124,7 +120,6 @@ def demand(
 
 @app.post("/forecast", tags=["models"])
 def make_forecast(request: ForecastRequest) -> dict[str, Any]:
-    """Generate a 24-hour-ahead demand forecast with P10/P90 bands."""
     from gridpulse.models.inference import forecast as run_forecast
 
     try:
@@ -135,7 +130,7 @@ def make_forecast(request: ForecastRequest) -> dict[str, Any]:
         raise HTTPException(404, str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(503, f"Model artifacts missing: {exc}") from exc
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
 
     return {
@@ -150,7 +145,6 @@ def make_forecast(request: ForecastRequest) -> dict[str, Any]:
 
 @app.get("/leaderboard", tags=["models"])
 def leaderboard() -> dict[str, Any]:
-    """Model accuracy versus EIA's own published day-ahead forecast."""
     frame = _query("""
         SELECT * FROM model_scores
         WHERE trained_at_utc = (SELECT max(trained_at_utc) FROM model_scores)
@@ -163,7 +157,6 @@ def leaderboard() -> dict[str, Any]:
 
 @app.get("/forecast-accuracy", tags=["models"])
 def forecast_accuracy() -> dict[str, Any]:
-    """EIA's own forecast error, aggregated per balancing authority."""
     frame = _query("""
         SELECT ba_code,
                round(avg(abs_pct_error), 3) AS eia_mape_pct,
@@ -180,7 +173,6 @@ def anomalies(
     severity: str = Query("high", pattern="^(low|medium|high|all)$"),
     limit: int = Query(200, ge=1, le=5000),
 ) -> dict[str, Any]:
-    """Recently detected grid anomalies."""
     clause = "" if severity == "all" else "AND severity = ?"
     params: list = [limit] if severity == "all" else [severity, limit]
     frame = _query(
@@ -199,7 +191,6 @@ def anomalies(
 
 @app.get("/data-quality", tags=["monitoring"])
 def data_quality() -> dict[str, Any]:
-    """Latest data quality scorecard."""
     scorecard = _query("SELECT * FROM dq_scorecard ORDER BY dimension")
     detail = _query("""
         SELECT check_name, dimension, severity, failed_rows, total_rows,
@@ -216,7 +207,6 @@ def data_quality() -> dict[str, Any]:
 
 @app.post("/ask", tags=["ai"])
 def ask(request: AskRequest) -> dict[str, Any]:
-    """Natural-language question answered by generating and running guarded SQL."""
     from gridpulse.agent import GridAgent
 
     agent = GridAgent(database=_database())

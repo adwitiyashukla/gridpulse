@@ -1,9 +1,3 @@
-"""Makes a real forward-looking 24-hour forecast for the live app.
-
-Falls back to replaying the most recent stored day when the network is down, so
-the public site still shows something instead of an error.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -42,7 +36,6 @@ def _app_database():
 
 
 def _load_recent(ba_code: str, hours: int = HISTORY_HOURS) -> pd.DataFrame:
-    """Recent observed history for one BA from whichever database is present."""
     from gridpulse.warehouse.duck import connect
 
     with connect(_app_database(), read_only=True) as con:
@@ -61,7 +54,6 @@ def _load_recent(ba_code: str, hours: int = HISTORY_HOURS) -> pd.DataFrame:
 
 
 def _fetch_future_weather(ba_code: str, hours: int = FORECAST_HORIZON) -> pd.DataFrame:
-    """Hourly weather forecast for the BA's load centre."""
     import httpx
 
     from gridpulse.config import WEATHER_VARIABLES
@@ -89,7 +81,6 @@ def _fetch_future_weather(ba_code: str, hours: int = FORECAST_HORIZON) -> pd.Dat
 
 
 def _calendar_columns(frame: pd.DataFrame, timezone_name: str) -> pd.DataFrame:
-    """Derive the local-time calendar attributes for rows that have none yet."""
     from pandas.tseries.holiday import USFederalHolidayCalendar
 
     local = frame["period_utc"].dt.tz_convert(timezone_name)
@@ -110,7 +101,6 @@ def _calendar_columns(frame: pd.DataFrame, timezone_name: str) -> pd.DataFrame:
 
 
 def forecast(ba_code: str, horizon: int = FORECAST_HORIZON, allow_network: bool = True) -> Forecast:
-    """Produce a 24-hour-ahead demand forecast with P10/P90 bands."""
     ba_code = ba_code.upper()
     if ba_code not in BALANCING_AUTHORITIES:
         raise ValueError(f"Unknown balancing authority '{ba_code}'.")
@@ -142,7 +132,7 @@ def forecast(ba_code: str, horizon: int = FORECAST_HORIZON, allow_network: bool 
             else:
                 future = pd.DataFrame()
                 notes.append("Weather forecast did not extend past stored history; using replay mode.")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Live weather fetch failed (%s); falling back to replay", exc)
             notes.append("Live weather unavailable; showing a replay of the most recent 24 hours.")
 

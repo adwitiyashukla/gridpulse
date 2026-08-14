@@ -1,6 +1,3 @@
-# Keep the Docker build context small. The Dockerfile copies only what the
-# served app needs, but a large context still slows every build and, on
-# Hugging Face Spaces, counts against the build timeout.
 .git
 .github
 .venv
@@ -9,13 +6,11 @@ __pycache__
 *.pyc
 *.egg-info
 
-# Regenerable data. Only data/gold is copied, and only the slim app database.
 data/bronze
 data/silver
 data/gold/gridpulse.duckdb
 data/gold/*.wal
 
-# Development-only tooling, not needed at runtime
 dbt
 orchestration
 tests
@@ -27,6 +22,5 @@ mlruns
 htmlcov
 .coverage
 
-# Secrets never enter an image
 .env
 .env.local

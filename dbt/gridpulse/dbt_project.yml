@@ -19,5 +19,4 @@ models:
       +materialized: table
 
 vars:
-  # Balance point for heating/cooling degree calculations, degrees Celsius.
   balance_point_c: 18

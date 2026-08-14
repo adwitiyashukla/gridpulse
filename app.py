@@ -1,6 +1,3 @@
-"""The public GridPulse website. Reads the committed database and model files, so
-it starts instantly and never trains anything while someone is waiting."""
-
 from __future__ import annotations
 
 import sys
@@ -15,12 +12,12 @@ import streamlit as st
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from gridpulse.config import BALANCING_AUTHORITIES  # noqa: E402
-from gridpulse.warehouse.duck import connect  # noqa: E402
+from gridpulse.config import BALANCING_AUTHORITIES
+from gridpulse.warehouse.duck import connect
 
 st.set_page_config(
     page_title="GridPulse | US Electricity Demand Intelligence",
-    page_icon="⚡",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -59,20 +56,6 @@ def database_path() -> Path:
 
 
 def data_version() -> str:
-    """Identify the currently deployed artifacts by size and modification time.
-
-    Every cached function below carries its own 900 second expiry, and each of
-    those clocks starts when that function is first called rather than when the
-    data changed. The caches therefore expire at different moments, and in the
-    window between them the page can report an hourly row count from one
-    training run beside an accuracy figure from the previous one. Both numbers
-    are individually correct and the pair is wrong, which is the least useful
-    kind of error to put in front of someone.
-
-    The weekly refresh rewrites the warehouse and the headline together, so
-    comparing their size and mtime detects a new deployment directly instead of
-    waiting for a timer to guess that one happened.
-    """
     parts = []
     for path in (database_path(), ROOT / "artifacts" / "headline.json"):
         try:
@@ -85,28 +68,10 @@ def data_version() -> str:
 
 @st.cache_resource
 def _deployed_version() -> dict[str, str | None]:
-    """Hold the last seen data version, shared across every user session.
-
-    Deliberately `cache_resource` rather than `session_state`. Session state is
-    per visitor, so the check below would fire once for each new arrival and
-    every one of them would clear a cache that was already correct. A resource
-    is shared process-wide, so the artifacts are detected as changed exactly
-    once no matter how many people are on the page. `st.cache_data.clear()`
-    does not touch `cache_resource`, so this record survives the clearing it
-    triggers.
-    """
     return {"version": None}
 
 
 def invalidate_caches_if_data_changed() -> None:
-    """Expire every cache at once when the artifacts change underneath us.
-
-    Streamlit Cloud reruns the script when a new commit lands but does not
-    always restart the process, so `st.cache_data` entries can outlive the files
-    they were derived from. Clearing on a version change makes a refresh visible
-    immediately and, more importantly, keeps the numbers on the page mutually
-    consistent.
-    """
     record = _deployed_version()
     current = data_version()
     if record["version"] != current:
@@ -125,7 +90,7 @@ def run_query(sql: str, params: tuple = ()) -> pd.DataFrame:
     try:
         with connect(path, read_only=True) as con:
             return con.execute(sql, list(params)).df()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         st.error(f"Query failed: {exc}")
         return pd.DataFrame()
 
@@ -156,7 +121,7 @@ skill = head.get("skill_vs_eia_pct")
 st.markdown(
     """
     <div class="gp-hero">
-      <h1>⚡ GridPulse</h1>
+      <h1>GridPulse</h1>
       <p>Day-ahead electricity demand forecasting for US balancing authorities,
          benchmarked against the EIA's own published forecast.</p>
       <div style="margin-top:0.8rem;">
@@ -198,13 +163,13 @@ with st.sidebar:
     )
     if not coverage.empty:
         st.caption(
-            f"**Warehouse coverage**  \n{coverage.iloc[0]['lo']:%Y-%m-%d} → "
+            f"**Warehouse coverage**  \n{coverage.iloc[0]['lo']:%Y-%m-%d} to "
             f"{coverage.iloc[0]['hi']:%Y-%m-%d}  \n{int(coverage.iloc[0]['n']):,} hourly rows"
         )
     st.divider()
     st.caption(
         "Built by **Adwitiya Shukla**  \n"
-        "[GitHub repository](https://github.com/adwitiyashukla/gridpulse) · Data: US EIA + Open-Meteo"
+        "[GitHub repository](https://github.com/adwitiyashukla/gridpulse), Data: US EIA + Open-Meteo"
     )
 
 c1, c2, c3, c4 = st.columns(4)
@@ -247,7 +212,7 @@ with tabs[0]:
         go_button = st.button("Generate forecast", type="primary", use_container_width=True)
 
     if go_button:
-        with st.spinner("Building features and scoring the model…"):
+        with st.spinner("Building features and scoring the model..."):
             try:
                 from gridpulse.models.inference import artifacts_available, forecast
 
@@ -258,16 +223,16 @@ with tabs[0]:
                     frame = result.frame
 
                     st.session_state["forecast_result"] = (result.mode, result.notes or [], frame)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 st.error(f"Forecast failed: {exc}")
 
     if "forecast_result" in st.session_state:
         mode, notes, frame = st.session_state["forecast_result"]
 
         badge = "Live forward forecast" if mode == "live" else "Replay of the last 24 hours"
-        st.info(f"**{badge}** · generated {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC")
+        st.info(f"**{badge}**, generated {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC")
         for note in notes:
-            st.caption(f"↳ {note}")
+            st.caption(f"- {note}")
 
         history = run_query(
             """
@@ -370,7 +335,7 @@ with tabs[1]:
                 figure = px.scatter(
                     scatter, x="temperature_2m", y="demand_mwh", color="season",
                     opacity=0.45,
-                    labels={"temperature_2m": "Temperature (°C)", "demand_mwh": "Demand (MW)"},
+                    labels={"temperature_2m": "Temperature (C)", "demand_mwh": "Demand (MW)"},
                 )
 
                 binned = (
@@ -504,7 +469,7 @@ with tabs[2]:
                    "peak_hour_mape_pct", "skill_vs_eia_pct"]]
             .rename(columns={
                 "mape_pct": "MAPE %", "smape_pct": "sMAPE %", "mae_mwh": "MAE (MW)",
-                "rmse_mwh": "RMSE (MW)", "r2": "R²",
+                "rmse_mwh": "RMSE (MW)", "r2": "R2",
                 "peak_hour_mape_pct": "Peak-hour MAPE %", "skill_vs_eia_pct": "Skill vs EIA %",
             }),
             use_container_width=True, hide_index=True,
@@ -641,7 +606,7 @@ with tabs[5]:
                                  placeholder="e.g. Which BA has the worst forecast error in summer?")
 
         if st.button("Ask", type="primary") and question.strip():
-            with st.spinner("Generating SQL and querying the warehouse…"):
+            with st.spinner("Generating SQL and querying the warehouse..."):
                 answer = agent.ask(question)
 
             if not answer.ok:
@@ -652,7 +617,7 @@ with tabs[5]:
                 if answer.summary:
                     st.success(answer.summary)
                 for warning in answer.warnings:
-                    st.caption(f"↳ {warning}")
+                    st.caption(f"- {warning}")
 
                 with st.expander("Generated SQL", expanded=True):
                     st.code(answer.sql, language="sql")
@@ -671,7 +636,7 @@ with tabs[5]:
                                                  paper_bgcolor="rgba(0,0,0,0)",
                                                  plot_bgcolor="rgba(0,0,0,0)")
                             st.plotly_chart(figure, use_container_width=True)
-                        except Exception:  # noqa: BLE001
+                        except Exception:
                             pass
 
 
@@ -701,29 +666,29 @@ anyone can check whether these results hold up.
 
     st.code(
         """
-EIA-930 API v2  ─┐
-                 ├─► BRONZE (Parquet, partitioned, immutable, watermarked)
-Open-Meteo      ─┘        │
-                          ▼
+EIA-930 API v2  --+
+                  +--> BRONZE (Parquet, partitioned, immutable, watermarked)
+Open-Meteo      --+       |
+                          v
                     SILVER (cleaned: measures become columns, weather joined,
                             every hour listed, local time, quality flags)
-                          │
-                          ▼
+                          |
+                          v
                     GOLD (DuckDB star schema)
-                      dim_ba · dim_date
+                      dim_ba, dim_date
                       fact_demand_hourly
-                      fact_forecast_accuracy   ← EIA benchmark scored here
-                          │
-        ┌─────────────────┼──────────────────┬───────────────────┐
-        ▼                 ▼                  ▼                   ▼
+                      fact_forecast_accuracy   <- EIA benchmark scored here
+                          |
+        +-----------------+------------------+-------------------+
+        v                 v                  v                   v
   16 quality checks   Features         Anomaly detection    SQL agent
   (6 categories)      (40 of them)     (3 detectors vote)   (guarded LLM)
-                          │
-                          ▼
-              LightGBM · LSTM · Transformer · Ensemble
-                          │
-                          ▼
-              FastAPI  ·  This Streamlit app
+                          |
+                          v
+              LightGBM, LSTM, Transformer, Ensemble
+                          |
+                          v
+              FastAPI, this Streamlit app
 """,
         language="text",
     )
@@ -771,6 +736,6 @@ would mean solving a harder problem than the real one.
 
 st.divider()
 st.caption(
-    "GridPulse · Data: US Energy Information Administration (EIA-930) and Open-Meteo · "
+    "GridPulse, Data: US Energy Information Administration (EIA-930) and Open-Meteo, "
     "Built by Adwitiya Shukla"
 )

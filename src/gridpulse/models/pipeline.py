@@ -1,9 +1,3 @@
-"""Builds the features, trains every model, and scores them all on the same rows.
-
-The benchmark is EIA's own published day-ahead forecast, not a baseline invented
-here. Results go to ``model_scores`` and ``model_predictions``, and to MLflow.
-"""
-
 from __future__ import annotations
 
 import json
@@ -34,7 +28,6 @@ def _mlflow():
 
 
 def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame:
-    """Train and evaluate the full model suite. Returns the leaderboard."""
     mlflow = _mlflow()
     if mlflow:
         mlflow.set_tracking_uri("file:" + str((PATHS.artifacts.parent / "mlruns").as_posix()))
@@ -113,7 +106,7 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
                 )
         except ImportError as exc:
             logger.warning("Skipping %s: %s", architecture, exc)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error("Deep model %s failed: %s", architecture, exc, exc_info=True)
 
     ensemble_parts = [c for c in ("pred_gbm", "pred_lstm") if c in predictions.columns]
@@ -139,7 +132,6 @@ def train_all(bas: list[str] | None = None, quick: bool = False) -> pd.DataFrame
 
 
 def _score(predictions: pd.DataFrame) -> pd.DataFrame:
-    """Score every ``pred_*`` column against actuals and rank by skill over EIA."""
     actual = predictions["demand_mwh"]
     rows = []
 

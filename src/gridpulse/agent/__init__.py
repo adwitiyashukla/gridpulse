@@ -1,5 +1,3 @@
-"""Agentic natural-language analytics over the warehouse."""
-
 from gridpulse.agent.text2sql import (
     SAMPLE_QUESTIONS,
     AgentAnswer,

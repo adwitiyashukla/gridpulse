@@ -1,9 +1,3 @@
-"""Builds the warehouse in DuckDB: raw bronze, cleaned silver, star schema gold.
-
-Bad readings are flagged rather than deleted, because deleting them also deletes
-the evidence that a meter was broken.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -23,13 +17,6 @@ SPIKE_DEVIATION_PCT = 20.0
 
 
 def _as_utc(value) -> pd.Timestamp:
-    """Coerce a timestamp to tz-aware UTC.
-
-    DuckDB returns tz-aware timestamps from ``.df()``, but the exact tzinfo object
-    varies by version and platform. Passing such a value to ``pd.date_range``
-    alongside ``tz="UTC"`` trips pandas' consistency assertion, so the endpoints
-    are normalised here instead.
-    """
     ts = pd.Timestamp(value)
     return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
 
@@ -52,11 +39,6 @@ def _dim_ba_frame() -> pd.DataFrame:
 
 
 def _dim_date_frame(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-    """Calendar dimension including US federal holidays and a holiday-adjacency flag.
-
-    Load on the working day either side of a holiday behaves differently from a
-    normal working day, so the adjacency flags earn their place as model features.
-    """
     from pandas.tseries.holiday import USFederalHolidayCalendar
 
     days = pd.date_range(start.normalize(), end.normalize(), freq="D")
@@ -85,18 +67,6 @@ def _dim_date_frame(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
 
 
 def build_warehouse(rebuild: bool = False) -> dict[str, int]:
-    """Build the silver and gold layers from the raw Parquet files in bronze.
-
-    Parameters
-    ----------
-    rebuild
-        Drop every managed table before rebuilding.
-
-    Returns
-    -------
-    dict
-        Row counts keyed by table name.
-    """
     PATHS.ensure()
 
     eia_glob = str(PATHS.bronze / "eia_region" / "**" / "*.parquet").replace("\\", "/")

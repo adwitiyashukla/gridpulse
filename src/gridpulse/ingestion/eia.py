@@ -1,9 +1,3 @@
-"""Downloads hourly demand, EIA's own forecast, generation and interchange.
-
-Only fetches periods newer than what is already saved, and running it twice does
-not create duplicate rows.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +27,6 @@ def bronze_path(ba_code: str) -> Path:
 
 
 def read_bronze(ba_code: str) -> pd.DataFrame:
-    """Existing bronze rows for a BA, or an empty correctly-typed frame."""
     path = bronze_path(ba_code)
     if not path.exists():
         return pd.DataFrame(columns=_SCHEMA)
@@ -41,7 +34,6 @@ def read_bronze(ba_code: str) -> pd.DataFrame:
 
 
 def watermark(ba_code: str) -> str | None:
-    """Latest period already stored for a BA, as an EIA ``YYYY-MM-DDTHH`` string."""
     existing = read_bronze(ba_code)
     if existing.empty:
         return None
@@ -52,7 +44,6 @@ def watermark(ba_code: str) -> str | None:
 def _build_params(
     ba_code: str, start: str, end: str, offset: int, length: int
 ) -> list[tuple[str, str]]:
-    """EIA v2 uses repeated bracketed keys, so params must be a list of tuples."""
     params: list[tuple[str, str]] = [
         ("api_key", SETTINGS.require_eia_key()),
         ("frequency", "hourly"),
@@ -70,11 +61,6 @@ def _build_params(
 
 
 def _normalise(records: list[dict]) -> pd.DataFrame:
-    """Coerce raw EIA records into the bronze schema.
-
-    EIA returns numerics as strings and occasionally omits ``value`` entirely for
-    hours a BA failed to report, so both are handled defensively.
-    """
     if not records:
         return pd.DataFrame(columns=_SCHEMA)
 
@@ -92,7 +78,6 @@ def _normalise(records: list[dict]) -> pd.DataFrame:
 
 
 def _merge(existing: pd.DataFrame, fresh: pd.DataFrame) -> pd.DataFrame:
-    """Merge new rows in. If a row already exists, the newest download wins."""
     if existing.empty:
         combined = fresh
     elif fresh.empty:
@@ -120,7 +105,6 @@ async def _fetch_ba(
     end: str,
     semaphore: asyncio.Semaphore,
 ) -> pd.DataFrame:
-    """Page through every row EIA holds for one BA across the requested window."""
     first = await fetch_json(
         client,
         REGION_DATA_ROUTE,
@@ -188,20 +172,6 @@ async def _ingest_async(bas: list[BalancingAuthority], full_refresh: bool) -> di
 
 
 def ingest_eia(ba_codes: list[str] | None = None, full_refresh: bool = False) -> dict[str, int]:
-    """Extract EIA-930 hourly telemetry into the bronze zone.
-
-    Parameters
-    ----------
-    ba_codes
-        Restrict to these balancing authorities. Defaults to ``GRIDPULSE_BAS``.
-    full_refresh
-        Ignore the stored watermark and re-download the whole history.
-
-    Returns
-    -------
-    dict
-        Total bronze row count per BA after the merge.
-    """
     PATHS.ensure()
     bas = active_bas()
     if ba_codes:
@@ -216,11 +186,6 @@ def ingest_eia(ba_codes: list[str] | None = None, full_refresh: bool = False) ->
 
 
 def probe_eia() -> dict:
-    """Single tiny request that validates the API key and response contract.
-
-    Always run this before a full ingestion: it fails in two seconds with a clear
-    message instead of thirty minutes into a download.
-    """
 
     async def _run() -> dict:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
@@ -244,7 +209,6 @@ def probe_eia() -> dict:
 
 
 def _run_sync(coro):
-    """Run a coroutine whether or not an event loop is already running."""
     try:
         asyncio.get_running_loop()
     except RuntimeError:

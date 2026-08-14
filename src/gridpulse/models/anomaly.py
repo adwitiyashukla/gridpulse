@@ -1,6 +1,3 @@
-"""Finds unusual hours using three detectors that have to agree: seasonal
-z-score, Isolation Forest and an autoencoder trained on daily demand shapes."""
-
 from __future__ import annotations
 
 import json
@@ -20,7 +17,6 @@ AE_PERCENTILE = 99.0
 
 
 def robust_seasonal_z(frame: pd.DataFrame, target: str = "demand_mwh") -> pd.Series:
-    """Median-absolute-deviation z-score within (BA, hour-of-day, month) cells."""
     work = frame[["ba_code", "hour_local", "month", target]].copy()
     grouped = work.groupby(["ba_code", "hour_local", "month"])[target]
 
@@ -62,8 +58,6 @@ def isolation_forest_scores(frame: pd.DataFrame, contamination: float = CONTAMIN
 
 
 def _daily_profiles(frame: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]:
-    """Turn each day into 24 numbers scaled by that day's median, so the model
-    learns the shape of a day rather than which region is biggest."""
     pivot = (
         frame.pivot_table(index=["ba_code", "date_local"], columns="hour_local",
                           values="demand_mwh", aggfunc="mean")
@@ -93,7 +87,6 @@ def _daily_profiles(frame: pd.DataFrame) -> tuple[np.ndarray, pd.DataFrame]:
 
 
 def autoencoder_scores(frame: pd.DataFrame, quick: bool = False) -> pd.DataFrame:
-    """Per-day reconstruction error from a small dense autoencoder."""
     profiles, index = _daily_profiles(frame)
     if profiles.shape[0] < 100:
         logger.warning("Too few complete days (%d) for the autoencoder; skipping", profiles.shape[0])
@@ -147,7 +140,6 @@ def autoencoder_scores(frame: pd.DataFrame, quick: bool = False) -> pd.DataFrame
 
 
 def classify_anomaly(row: pd.Series) -> str:
-    """Human-readable label so an operator knows what they are looking at."""
     if row.get("flag_frozen_reading"):
         return "frozen_telemetry"
     if row.get("flag_nonpositive_demand"):
@@ -164,7 +156,6 @@ def classify_anomaly(row: pd.Series) -> str:
 
 
 def run_anomaly_detection(quick: bool = False, persist: bool = True) -> pd.DataFrame:
-    """Run every detector, combine by consensus and persist to ``anomaly_scores``."""
     frame = query("""
         SELECT period_utc, ba_code, date_local, hour_local, month,
                demand_mwh, temperature_2m,

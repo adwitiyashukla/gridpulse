@@ -1,11 +1,3 @@
-"""Feature engineering, with particular attention to temporal leakage.
-
-Leakage is the failure mode that silently ruins time-series projects: the model
-scores beautifully in validation and collapses in production because a feature
-encoded information that would not have existed at prediction time. These tests
-assert it cannot happen.
-"""
-
 from __future__ import annotations
 
 import numpy as np
@@ -54,7 +46,6 @@ def test_no_nulls_remain_in_lag_features(raw_frame):
 
 
 def test_cyclical_encoding_wraps_around(raw_frame):
-    """Hour 23 and hour 0 must be neighbours in the encoded space."""
     featured = build_features(frame=raw_frame)
     hour_23 = featured[featured["hour_local"] == 23].iloc[0]
     hour_0 = featured[featured["hour_local"] == 0].iloc[0]
@@ -67,7 +58,6 @@ def test_cyclical_encoding_wraps_around(raw_frame):
 
 
 def test_lag_features_reference_the_correct_past_value(raw_frame):
-    """demand_lag_24h at time t must equal actual demand at t - 24h."""
     featured = build_features(frame=raw_frame)
     single = featured[featured["ba_code"] == "PJM"].sort_values("period_utc")
     source = raw_frame[raw_frame["ba_code"] == "PJM"].set_index("period_utc")[TARGET]
@@ -78,7 +68,6 @@ def test_lag_features_reference_the_correct_past_value(raw_frame):
 
 
 def test_rolling_features_do_not_leak_the_present(raw_frame):
-    """Rolling statistics must be shifted by at least the forecast horizon."""
     featured = build_features(frame=raw_frame)
     single = featured[featured["ba_code"] == "PJM"].sort_values("period_utc").reset_index(drop=True)
     source = raw_frame[raw_frame["ba_code"] == "PJM"].sort_values("period_utc").reset_index(drop=True)
@@ -109,7 +98,6 @@ def test_chronological_split_never_overlaps(raw_frame):
 
 
 def test_inference_frame_keeps_rows_without_a_target(raw_frame):
-    """Future rows have no actual demand yet and must survive feature building."""
     frame = raw_frame.copy()
     frame.loc[frame.index[-12:], TARGET] = np.nan
 

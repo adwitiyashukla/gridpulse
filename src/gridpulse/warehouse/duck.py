@@ -1,5 +1,3 @@
-"""Opening and closing DuckDB connections, plus a few small query helpers."""
-
 from __future__ import annotations
 
 import logging
@@ -25,7 +23,6 @@ def connect(
     memory_limit: str = DEFAULT_MEMORY_LIMIT,
     threads: int = DEFAULT_THREADS,
 ) -> Iterator[duckdb.DuckDBPyConnection]:
-    """Yield a configured DuckDB connection, always closed on exit."""
     target = Path(path) if path else PATHS.duckdb
     target.parent.mkdir(parents=True, exist_ok=True)
 
@@ -40,7 +37,6 @@ def connect(
 
 
 def query(sql: str, params: list | None = None, path: Path | str | None = None) -> pd.DataFrame:
-    """Run a read-only SELECT and return a DataFrame."""
     with connect(path, read_only=True) as con:
         return con.execute(sql, params or []).df()
 
@@ -59,7 +55,6 @@ def row_count(con: duckdb.DuckDBPyConnection, name: str) -> int:
 
 
 def summarise(path: Path | str | None = None) -> pd.DataFrame:
-    """One row per table with its row count. Used by the CLI and the dashboard."""
     with connect(path, read_only=True) as con:
         tables = con.execute(
             "SELECT table_name FROM information_schema.tables "

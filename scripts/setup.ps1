@@ -1,6 +1,3 @@
-# GridPulse one-shot setup for Windows PowerShell.
-#   powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
-
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
 

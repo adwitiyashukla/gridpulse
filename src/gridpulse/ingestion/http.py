@@ -1,5 +1,3 @@
-"""Shared HTTP helper so the retry and backoff rules live in one place."""
-
 from __future__ import annotations
 
 import asyncio
@@ -22,15 +20,10 @@ RATE_LIMIT_MAX_WAIT = 90.0
 
 
 class UpstreamError(RuntimeError):
-    """Raised when an upstream API fails in a way retrying will not fix."""
+    pass
 
 
 def _retry_delay(status: int | None, attempt: int, retry_after: str | None) -> float:
-    """How long to wait before the next attempt.
-
-    A server-supplied ``Retry-After`` header always wins: it is the upstream
-    telling us exactly when it will accept traffic again.
-    """
     if retry_after:
         try:
             return min(float(retry_after), RATE_LIMIT_MAX_WAIT)
@@ -51,14 +44,6 @@ async def fetch_json(
     semaphore: asyncio.Semaphore | None = None,
     label: str = "",
 ) -> dict[str, Any]:
-    """GET ``url`` and decode JSON, retrying transient failures with jittered backoff.
-
-    Raises
-    ------
-    UpstreamError
-        On a non-retryable status (e.g. 400 bad request, 403 bad API key) or after
-        exhausting ``MAX_ATTEMPTS``.
-    """
     last_error: Exception | None = None
 
     for attempt in range(1, MAX_ATTEMPTS + 1):

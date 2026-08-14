@@ -1,7 +1,3 @@
--- Binned demand response to temperature: the empirical V-curve.
--- Demand is indexed against each BA's own median so curves from systems of
--- wildly different size can be plotted on one axis.
-
 with hourly as (
 
     select * from {{ ref('stg_demand_hourly') }}

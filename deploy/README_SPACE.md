@@ -10,7 +10,7 @@ license: mit
 short_description: Day-ahead grid demand forecasting benchmarked vs the EIA
 ---
 
-# ⚡ GridPulse
+# GridPulse
 
 Day-ahead electricity demand forecasting for US balancing authorities,
 benchmarked against the **EIA's own published day-ahead forecast**.

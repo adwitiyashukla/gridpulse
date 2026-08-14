@@ -1,5 +1,3 @@
--- Staging view over EIA's own day-ahead forecast error.
-
 select
     period_utc,
     ba_code,
