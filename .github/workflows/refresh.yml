@@ -62,7 +62,7 @@ jobs:
         continue-on-error: true
 
       - name: Train models
-        if: ${{ inputs.retrain != false }}
+        if: ${{ github.event_name == 'schedule' || inputs.retrain }}
         env:
           EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
         run: gridpulse train
