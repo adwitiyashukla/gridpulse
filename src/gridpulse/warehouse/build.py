@@ -173,7 +173,6 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
             e.total_interchange_mwh,
             {weather_select},
 
-            -- Data quality flags. Diagnosis, not deletion.
             (e.demand_mwh IS NULL)                                   AS flag_missing_demand,
             (e.demand_mwh IS NOT NULL
              AND e.demand_mwh < {MIN_PLAUSIBLE_MWH})                 AS flag_nonpositive_demand,
@@ -239,8 +238,6 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
             s.total_interchange_mwh,
             {", ".join("s." + v for v in WEATHER_VARIABLES)},
 
-            -- Interpolated demand: a modelling-ready series with short gaps bridged.
-            -- The raw column is retained untouched alongside it.
             CASE WHEN s.demand_mwh IS NOT NULL
                       AND NOT s.flag_nonpositive_demand
                       AND s.demand_mwh BETWEEN b.lower_bound AND b.upper_bound
@@ -258,13 +255,10 @@ def build_warehouse(rebuild: bool = False) -> dict[str, int]:
                 / nullif(lag(s.demand_mwh) OVER w, 0) * 100
                 > {MAX_HOURLY_RAMP_PCT})                                  AS flag_extreme_ramp,
 
-            -- Physically impossible magnitude. Flagged, never deleted: the reading
-            -- is the evidence that upstream telemetry failed.
             (s.demand_mwh IS NOT NULL
              AND (s.demand_mwh < b.lower_bound
                   OR s.demand_mwh > b.upper_bound))                       AS flag_implausible_magnitude,
 
-            -- Isolated excursion: departs sharply from the local 5-hour median.
             (s.demand_mwh IS NOT NULL
              AND n.local_median IS NOT NULL
              AND abs(s.demand_mwh - n.local_median)

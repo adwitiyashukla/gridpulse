@@ -18,7 +18,7 @@ PRETTY = {
     "lstm": "**LSTM** encoder",
     "transformer": "**Transformer** encoder",
     "ensemble": "**Ensemble** (GBM + LSTM)",
-    "eia_official": "_EIA official forecast_ ",
+    "eia_official": "_EIA official forecast_",
     "seasonal_naive": "Seasonal naive (24h)",
     "weekly_naive": "Weekly naive (168h)",
     "drift_naive": "Drift naive",
@@ -73,9 +73,8 @@ def main() -> int:
                 f"**{head['test_observations']:,}** out-of-sample hours across 12 balancing "
                 f"authorities.\n"
                 f">\n"
-                f"> Trained without ever seeing the test window. The EIA benchmark is the "
-                f"forecast the US government actually published and grid operators actually "
-                f"operated against.\n\n" + table
+                f"> The model never sees the test window during training, and the EIA "
+                f"benchmark is the forecast the US government actually published.\n\n" + table
             )
 
     table += (

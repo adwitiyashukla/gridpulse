@@ -44,9 +44,6 @@ def load_modelling_frame(ba_codes: list[str] | None = None) -> pd.DataFrame:
 
     frame = query(f"""
         SELECT period_utc, ba_code, date_local, hour_local,
-               -- The warehouse is the single source of truth for what counts as a
-               -- trustworthy reading. Modelling consumes demand_clean_mwh so the
-               -- cleaning rules live in one place rather than being reimplemented here.
                demand_clean_mwh AS demand_mwh, demand_forecast_mwh,
                temperature_2m, apparent_temperature, relative_humidity_2m,
                dew_point_2m, cloud_cover, wind_speed_10m, shortwave_radiation,

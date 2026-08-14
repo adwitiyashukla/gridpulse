@@ -645,20 +645,10 @@ with tabs[6]:
 
     st.markdown(
         """
-### The problem
-
-Electricity cannot really be stored at grid scale, so the companies that run the
-grid have to decide today how much power to generate tomorrow. Guess too high and
-they burn fuel making electricity nobody uses. Guess too low and they have to buy
-the shortfall at emergency prices, or cut power to customers. On a large grid,
-being off by one percent costs millions of dollars a year.
-
-### What I compare against
-
-The EIA publishes each region's own day-ahead forecast next to what actually
-happened. So instead of making up an easy baseline, every model here is scored
-against the forecast grid operators really published and really used, which means
-anyone can check whether these results hold up.
+Grid operators decide today how much power to generate tomorrow, so a day-ahead
+demand forecast has real money attached to it. The EIA publishes each region's own
+day-ahead forecast next to what actually happened, so every model here is scored
+against that instead of a baseline I made up.
 
 ### The pipeline
 """
@@ -695,28 +685,15 @@ Open-Meteo      --+       |
 
     st.markdown(
         """
-### Why I built it this way
+### Some choices
 
-Why DuckDB and not Postgres or Spark. It handles hundreds of millions of rows
-inside a single file with no server to run. I built this on a laptop with 8 GB of
-RAM, and that was the difference between a pipeline that finishes and one that runs
-out of memory. The SQL would still run on Snowflake or BigQuery unchanged.
-
-Why one model for all 12 regions. The regions behave similarly, so training
-together lets the bigger ones help the smaller ones. It also means one model file
-to deploy and monitor instead of twelve.
-
-Why I flag bad data instead of deleting it. A meter stuck on the same value is
-proof that the meter broke. Quietly dropping that row also drops the only record
-that anything went wrong.
-
-Why I only split by date. If you split time-series data randomly, rows from the
-future sit next to rows from the past and the model effectively sees answers it
-should not have. The scores look great and mean nothing.
-
-Why using tomorrow's weather is not cheating. A real grid operator also has
-tomorrow's weather forecast and knows what day of the week it is. Leaving it out
-would mean solving a harder problem than the real one.
+- One LightGBM model across all 12 regions, with the region code as a categorical
+  feature, so the bigger regions help the smaller ones and there is one model file
+  to deploy instead of twelve.
+- Bad readings are flagged, not deleted, so a broken meter leaves evidence behind.
+- Every split is by date. Splitting time series randomly puts future rows next to
+  past ones and the scores stop meaning anything.
+- The models use tomorrow's weather forecast, which a real grid operator also has.
 
 ### What it is built with
 

@@ -17,14 +17,14 @@ benchmarked against the **EIA's own published day-ahead forecast**.
 
 | Model | MAPE | vs EIA |
 |---|---|---|
-| **LightGBM hybrid** (+ EIA forecast as input) | **2.771%** | **+25.0%** |
-| **LightGBM** (global, from first principles) | 3.676% | +0.6% |
-| _EIA official forecast_ | 3.696% | benchmark |
-| Seasonal naive (24h) | 5.677% | -53.6% |
-| Weekly naive (168h) | 9.117% | -146.7% |
+| **LightGBM hybrid** (+ EIA forecast as input) | **2.797%** | **+24.1%** |
+| **LightGBM** (global, weather and calendar only) | 3.683% | +0.1% |
+| _EIA official forecast_ | 3.686% | benchmark |
+| Seasonal naive (24h) | 5.657% | -53.5% |
+| Weekly naive (168h) | 9.328% | -153.1% |
 
-Measured over 25,927 out-of-sample hours across 12 balancing authorities, using a
-strictly chronological split.
+Measured over 25,925 out-of-sample hours across 12 balancing authorities, split by
+date so the model never sees the test window.
 
 ## What you can do here
 
