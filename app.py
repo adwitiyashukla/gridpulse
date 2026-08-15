@@ -672,7 +672,7 @@ Open-Meteo      --+       |
         +-----------------+------------------+-------------------+
         v                 v                  v                   v
   16 quality checks   Features         Anomaly detection    SQL agent
-  (6 categories)      (40 of them)     (3 detectors vote)   (guarded LLM)
+  (6 categories)      (39 of them)     (3 detectors vote)   (guarded LLM)
                           |
                           v
               LightGBM, LSTM, Transformer, Ensemble

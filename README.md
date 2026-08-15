@@ -1,94 +1,74 @@
-<div align="center">
-
 # GridPulse
 
-**Day-ahead electricity demand forecasting for the US power grid -
-benchmarked against the EIA's own published forecast.**
+A day-ahead electricity demand forecaster for 12 US grid regions, scored against
+the forecast the US Energy Information Administration actually published for the
+same hours.
 
-[![Hugging Face](https://img.shields.io/badge/live%20app-Hugging%20Face-FFD21E?logo=huggingface&logoColor=black)](https://huggingface.co/spaces/adwitiyashukla/gridpulse)
-[![Streamlit](https://img.shields.io/badge/live%20app-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://gridpulse-ai.streamlit.app)
 [![CI](https://github.com/adwitiyashukla/gridpulse/actions/workflows/ci.yml/badge.svg)](https://github.com/adwitiyashukla/gridpulse/actions/workflows/ci.yml)
 [![Refresh](https://github.com/adwitiyashukla/gridpulse/actions/workflows/refresh.yml/badge.svg)](https://github.com/adwitiyashukla/gridpulse/actions/workflows/refresh.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-</div>
+Live: [Hugging Face](https://huggingface.co/spaces/adwitiyashukla/gridpulse)
+or [Streamlit Cloud](https://gridpulse-ai.streamlit.app). Both run off the same commit.
 
-Live app: [Hugging Face](https://huggingface.co/spaces/adwitiyashukla/gridpulse) (Docker)
-or [Streamlit Cloud](https://gridpulse-ai.streamlit.app), both deployed from the same commit.
+## Why I didn't invent my own baseline
 
----
+The easy version of this project is to build a load forecaster, compare it to a
+seasonal naive baseline, beat it by a mile, and put the number in a README. I
+started down that road and stopped, because that comparison proves almost nothing.
+Electricity demand at 3pm today looks a lot like 3pm yesterday. Beating "yesterday"
+is not hard, and every forecasting project on GitHub has already done it.
 
-## Results
+Then I found that the EIA publishes each region's own day-ahead forecast in the
+same dataset as the actual demand, hour for hour. That is not a baseline anyone
+made up. It is what grid operators submitted in advance and then operated against,
+with real money attached to being wrong.
 
-<!-- RESULTS:START -->
-> ### 24.1% more accurate than the EIA's own day-ahead forecast
->
-> **LightGBM hybrid (+ EIA forecast as input)** reaches **2.797% MAPE** against the EIA's **3.686%**, measured over **25,925** out-of-sample hours across 12 balancing authorities.
->
-> The model never sees the test window during training, and the EIA benchmark is the forecast the US government actually published.
+So that became the thing to beat. It also means anyone can check my numbers,
+because the benchmark ships with the data instead of living in my code.
 
-| Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Skill vs EIA |
-|---|---|---|---|---|---|---|
-| **LightGBM hybrid** (+ EIA forecast as input) | 2.797 | 1,068 | 1,826 | 0.9964 | 3.483 | **+24.1%** |
-| **LightGBM** (global, quantile) | 3.683 | 1,395 | 2,330 | 0.9942 | 4.626 | **+0.1%** |
-| _EIA official forecast_ | 3.686 | 1,383 | 2,442 | 0.9936 | 2.885 | - (benchmark) |
-| **Ensemble** (GBM + LSTM) | 4.670 | 1,659 | 2,598 | 0.9928 | 3.760 | -26.7% |
-| Seasonal naive (24h) | 5.657 | 1,922 | 3,179 | 0.9892 | 5.273 | -53.5% |
-| **LSTM** encoder | 6.191 | 2,093 | 3,311 | 0.9882 | 3.171 | -68.0% |
-| **Transformer** encoder | 6.577 | 2,425 | 3,632 | 0.9859 | 5.284 | -78.4% |
-| Weekly naive (168h) | 9.328 | 3,480 | 6,032 | 0.9610 | 12.734 | -153.1% |
+## Where the data comes from
 
-<sub>P10/P50/P90 quantile models are omitted above: they define the prediction interval rather than competing as point forecasts. Interval calibration is reported separately.</sub>
-<!-- RESULTS:END -->
+Two public sources, no synthetic data anywhere in the results.
 
-Tested on the most recent 90 days across 12 balancing authorities, split by date so
-the model never sees the test window. The benchmark is the EIA's own day-ahead
-forecast, which comes in the same dataset as the actual values.
+| Source | What I take from it |
+|---|---|
+| EIA Form 930 (API v2) | Hourly demand, the EIA's own day-ahead forecast, net generation, interchange |
+| Open-Meteo | Hourly weather for each region's biggest city, ERA5 archive joined to the forecast endpoint |
 
-**Limitations**
+Weather comes from the load centre rather than the geographic centre of a region,
+because demand follows the weather where people actually live. ERCOT is pulled at
+Houston, not somewhere in west Texas.
 
-- The P10-P90 band should contain 80% of actual values but only contains 58%, so the model is more confident than it should be. The fix is conformal calibration.
-- The EIA is still better at peak hours (2.885% against 3.483%), and peak hours are where being wrong costs the most.
-- `gbm_hybrid` gets the EIA forecast as an input feature, so it has an easier job than `gbm`, which only uses weather, the calendar and past demand.
-- The LSTM and the Transformer both lose to a simple seasonal baseline. With 12 series and a few years of data that is what you would expect.
+The archive lags about five days behind, so I stitch it to the forecast endpoint
+to cover the gap and to get tomorrow's weather. Where both cover the same hour the
+archive wins, since it is the measured value.
 
----
-
-## Architecture
+## The pipeline
 
 ```mermaid
 flowchart TD
-    subgraph EXTRACT["1. Extract"]
-        A1["EIA-930 API v2<br/><i>demand, EIA forecast<br/>generation, interchange</i>"]
-        A2["Open-Meteo<br/><i>ERA5 archive + forecast</i>"]
-    end
+    A1["EIA-930 API v2<br/>demand, EIA forecast<br/>generation, interchange"]
+    A2["Open-Meteo<br/>ERA5 archive + forecast"]
 
-    subgraph LAKE["2. Lakehouse"]
-        B1["<b>BRONZE</b><br/>Parquet, partitioned<br/>immutable, watermarked"]
-        B2["<b>SILVER</b><br/>measures pivoted, weather joined<br/>hourly spine, local civil time<br/>quality flags"]
-        B3["<b>GOLD</b> - DuckDB star schema<br/>dim_ba, dim_date<br/>fact_demand_hourly<br/>fact_forecast_accuracy"]
-    end
+    B1["BRONZE<br/>Parquet, partitioned by region<br/>never overwritten, watermarked"]
+    B2["SILVER<br/>measures pivoted, weather joined<br/>hourly spine, local civil time<br/>quality flags"]
+    B3["GOLD, DuckDB star schema<br/>dim_ba, dim_date<br/>fact_demand_hourly<br/>fact_forecast_accuracy"]
 
-    subgraph PROCESS["3. Process"]
-        C1["dbt marts<br/><i>5 models, 20+ tests</i>"]
-        C2["Data quality<br/><i>16 checks, 6 dimensions</i>"]
-        C3["Feature store<br/><i>40 engineered features</i>"]
-        C4["Anomaly detection<br/><i>3-detector consensus</i>"]
-    end
+    C1["dbt marts<br/>5 models, 20+ tests"]
+    C2["Data quality<br/>16 checks, 6 categories"]
+    C3["Features<br/>39 per row"]
+    C4["Anomalies<br/>3 detectors vote"]
 
-    subgraph ML["4. Models"]
-        D1["Baselines<br/>seasonal, weekly naive"]
-        D2["LightGBM<br/>global + P10/P50/P90"]
-        D3["PyTorch LSTM<br/>known future covariates"]
-        D4["Transformer<br/>attention encoder"]
-    end
+    D1["Baselines"]
+    D2["LightGBM<br/>point + P10/P50/P90"]
+    D3["LSTM"]
+    D4["Transformer"]
 
-    subgraph SERVE["5. Serve"]
-        E1["FastAPI<br/><i>OpenAPI documented</i>"]
-        E2["Streamlit app<br/><i>public website</i>"]
-        E3["LLM agent<br/><i>guarded text-to-SQL</i>"]
-    end
+    E1["FastAPI"]
+    E2["Streamlit app"]
+    E3["Guarded text-to-SQL"]
 
     A1 --> B1
     A2 --> B1
@@ -98,180 +78,393 @@ flowchart TD
     D2 & D3 --> E1 & E2
     B3 --> E3
     C4 --> E2
-
-    ORCH["<b>Orchestration</b><br/>Dagster assets, Airflow DAG mirror<br/>GitHub Actions scheduled refresh"]
-    ORCH -.governs.-> LAKE
-    ORCH -.governs.-> PROCESS
-    ORCH -.governs.-> ML
 ```
 
-Anything built from past demand is shifted back by the full 24 hours, and every split
-is by date rather than random. `tests/test_features.py` checks both.
+Bronze files are never rewritten, only appended to, and each region stores a
+watermark so a rerun picks up where the last one stopped instead of downloading
+seven years again. Silver is where the timezone work happens. Gold is the star
+schema everything downstream reads.
 
----
+## Getting the time axis right
 
-## Quickstart
+This is the part that took the longest and has nothing to do with machine learning.
 
-Python 3.10-3.12 and a free [EIA API key](https://www.eia.gov/opendata/register.php).
-A free [Groq key](https://console.groq.com/keys) is optional and enables the SQL agent.
+Grid data is reported in UTC, but electricity demand follows local human behaviour.
+People in Los Angeles switch things on at 7am Pacific regardless of what UTC says.
+So every row carries both: stored in UTC, with local civil time derived from the
+region's timezone for anything hour-of-day related.
 
-```bash
+That creates two problems that only show up twice a year. When clocks go back there
+are two 1am hours locally, which turns into a duplicate row if you key on local time.
+When they go forward there is no 2am at all, which looks like missing data. Keying
+on UTC and deriving local time from it makes both disappear.
+
+The other thing I did was build a continuous hourly spine per region between the
+first and last observation, then left join the readings onto it. If a region simply
+did not report for six hours, I want a row saying so rather than a silent gap that a
+lag feature would step straight over. There is a test that walks the spine and fails
+if any two consecutive hours are more than an hour apart.
+
+That test taught me something. It first reported 12 gaps in a series I knew was
+continuous, because I had written it with `date_diff('hour', ...)`, which DuckDB
+resolves using the session timezone and counts daylight saving transitions as
+missing hours. Measuring the difference in epoch seconds instead fixed it. The test
+was wrong, not the data, and I nearly changed the data to match.
+
+## The features, and keeping the future out of them
+
+39 features per row: cyclical encodings of hour, day of week and day of year,
+holiday and weekend flags, lags of demand at 24, 25, 26, 48, 72, 168 and 336 hours,
+rolling mean and standard deviation over 24 and 168 hours, the raw weather columns,
+heating and cooling degrees split around an 18C balance point, and a few interaction
+terms.
+
+The rule I held to is that a feature for hour t can only use information that
+existed at t minus 24 hours. Every rolling statistic is shifted by the full forecast
+horizon before the window is taken. Every train, validation and test split is by
+timestamp, never random, because shuffling a time series puts future rows next to
+past ones and the score stops meaning anything.
+
+Weather and the calendar are the exception, and I think that is fair. A real grid
+operator planning tomorrow already has tomorrow's weather forecast and knows it is a
+Tuesday. Hiding that would be solving a harder problem than the one utilities have.
+`tests/test_features.py` rebuilds the expected lag and rolling windows from the raw
+data and checks the built features match.
+
+The model agrees about what matters. Cooling degrees interacted with hour of day
+carries the most gain, then the 24 hour rolling mean of temperature, then the region
+code, then temperature squared. Yesterday's demand at the same hour is fifth. Air
+conditioning load, basically.
+
+## One model for twelve regions
+
+I train a single LightGBM model across all 12 regions with the region code as a
+categorical feature, rather than 12 separate models.
+
+The regions behave alike. How demand responds to temperature in Atlanta genuinely
+tells you something about the same curve in Charlotte, so training together lets the
+larger regions help the smaller ones. It also means one model file to version and
+deploy instead of twelve, and adding a thirteenth region becomes more data rather
+than more infrastructure.
+
+The catch is scale. PJM peaks near 165,000 MW and TVA sits around 18,000 MW, so an
+unscaled loss would let PJM dominate training completely. Each region's target is
+normalised by its own median and interquartile range before training and inverted
+afterwards. Why median and IQR rather than mean and standard deviation is the first
+story in the next section.
+
+I also train a second variant that takes the EIA's published forecast as an input
+feature. It is the strongest model in the table, and it is solving an easier problem:
+correcting somebody else's forecast rather than producing one from scratch. I report
+both because showing only the better one would be misleading.
+
+## What the numbers say
+
+<!-- RESULTS:START -->
+LightGBM hybrid (+ EIA forecast as input) gets 2.797% MAPE where the EIA's own published forecast gets 3.686%, which is 24.1% better, measured on 25,925 test hours from 2026-05-08 onwards across 12 balancing authorities.
+
+| Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Hours scored | Skill vs EIA |
+|---|---|---|---|---|---|---|---|
+| **LightGBM hybrid** (+ EIA forecast as input) | 2.797 | 1,068 | 1,826 | 0.9964 | 3.483 | 25,925 | **+24.1%** |
+| **LightGBM** (global, quantile) | 3.683 | 1,395 | 2,330 | 0.9942 | 4.626 | 25,925 | **+0.1%** |
+| _EIA official forecast_ | 3.686 | 1,383 | 2,442 | 0.9936 | 2.885 | 25,670 | - (benchmark) |
+| **Ensemble** (GBM + LSTM) | 4.670 | 1,659 | 2,598 | 0.9928 | 3.760 | 25,925 | -26.7% |
+| Seasonal naive (24h) | 5.657 | 1,922 | 3,179 | 0.9892 | 5.273 | 25,925 | -53.5% |
+| **LSTM** encoder | 6.191 | 2,093 | 3,311 | 0.9882 | 3.171 | 25,914 | -68.0% |
+| **Transformer** encoder | 6.577 | 2,425 | 3,632 | 0.9859 | 5.284 | 25,914 | -78.4% |
+| Weekly naive (168h) | 9.328 | 3,480 | 6,032 | 0.9610 | 12.734 | 25,925 | -153.1% |
+
+The P10, P50 and P90 rows are left out of this table. They draw the prediction interval rather than competing as point forecasts.
+<!-- RESULTS:END -->
+
+Some things those numbers do not say.
+
+The prediction interval is too narrow. The P10 to P90 band should contain 80% of
+actual values and contains 58.08%. The model is more confident than it has earned.
+Conformal calibration on held-out residuals is the fix and I have not done it yet.
+
+The EIA is still better than me at peak hours, 2.885% against my 3.483%. Peak hours
+are exactly where a miss costs the most, because that is when generation gets bought
+at short notice, so this is the gap that matters most and I am losing it.
+
+The EIA row is scored on 25,670 hours where every other row has 25,925. That is not
+a mistake in the table. Their published forecast is missing for a few hundred hours,
+and I score each model only on hours where that model produced a prediction, rather
+than filling gaps with something invented.
+
+The comparison also flatters me. The EIA produced their forecast live, on a deadline,
+with whatever data existed at the time. Mine is trained on years of history and only
+withheld from the test window. It is a fair accuracy comparison and it is not proof
+my model would hold up in real operations.
+
+The deep models lost. Both the LSTM and the Transformer come in behind a seasonal
+naive baseline. With 12 series and a few years of data that is roughly what the
+literature would predict, and gradient boosting on good features is simply the right
+tool at this size. I kept them in because comparing the approaches was the point.
+
+## Three things that broke
+
+Twelve things went wrong badly enough that I had to stop and work out why. These
+three taught me the most.
+
+### Forty readings out of eight hundred thousand
+
+LightGBM stopped after 6 trees. Final score was 53.9% MAPE with an R2 of -131, which
+is worse than predicting the mean every time. It also ranked day of year and cloud
+cover above yesterday's demand at the same hour, which makes no sense for electricity.
+
+Rather than guess, I wrote a script to print the scaling statistics the model had
+fitted. PJM came back with a mean of 158,481 MW and a standard deviation of
+10,739,790 MW. PJM's real range is roughly 70,000 to 165,000 MW, so a standard
+deviation of 10.7 million is impossible. Then I scored each region separately: PJM
+was 583%, TVA was 20%, and every other region sat between 2.9% and 7.3%. Exactly the
+two regions with broken statistics. The median error was 4.2% while the mean was
+53.9%, and the worst 1% of rows accounted for 47.5% of all the error, which is the
+signature of a handful of extreme values rather than a bad model.
+
+The cause was 40 physically impossible readings in roughly 800,000 hours. I was
+scaling with mean and standard deviation, and both can be dragged anywhere by one
+absurd value. Forty rows broke the scaling, and the broken scaling broke every
+prediction for those regions.
+
+I switched both scalers to median and IQR, excluded readings outside 0.2x to 5x a
+region's own median from training, and added two critical quality checks: one for
+impossible magnitudes and one that fails if any region's standard deviation exceeds
+its mean. MAPE went from 53.9% to 3.68% and R2 from -131 to 0.994.
+
+The part I keep coming back to is that my quality suite had 13 checks at the time and
+all 13 passed. It checked that demand was never below zero. It never occurred to me
+to check whether demand might be far too large.
+
+### A spike filter that filtered nothing
+
+After adding spike removal the charts still drew tall vertical spikes near the right
+edge. My first attempt flagged a point if it sat more than 25% away from both of its
+neighbours in the same direction. It caught nothing at all.
+
+I wrote a second script to print the last 60 hours with every flag beside them, and
+there were two separate reasons. One spike was 21.5% away on one side and 26.2% on
+the other, so it slipped under a 25% threshold that needed both. The other was the
+very last row in the series, so it had no next neighbour and my condition could never
+be true for it.
+
+Comparing a point against its neighbours cannot work at the ends of a series, and the
+end is exactly where the newest and least settled data sits. I replaced it with a
+comparison against a 5 hour rolling median centred on each point. Total demand moves
+smoothly over five hours, so a real day never strays far from its local median, a bad
+reading stands out whichever side it falls on, and a partial window at the end is
+still perfectly usable.
+
+### A green pipeline that shipped a broken image
+
+I added a `.gitattributes` file to stop Git on Windows rewriting line endings, which
+was making a repository nobody had edited show 910 changed lines. That fix was
+correct. It also broke my Hugging Face Space.
+
+Every Space comes with its own `.gitattributes` whose job is to tell Git which large
+files live in Git LFS. My sync workflow uploads the whole repository, so my new file
+replaced theirs. Hugging Face automatically puts anything over about 10 MB into LFS,
+which here means the two 35 MB model files and the app database. Git only swaps an
+LFS file back for the real thing when `.gitattributes` declares a filter for it, so
+once those lines were gone the Docker build checked out 133 byte pointer files and
+copied a pointer into the image instead of my database.
+
+The linter passed. The tests passed. The sync passed. The Docker build passed. The
+container health check passed. The only place the failure appeared was on the page
+itself, saying the DuckDB file was not a valid DuckDB database. Meanwhile the exact
+same repository was fine on Streamlit Cloud, because on GitHub those files are
+ordinary blobs and never went near LFS.
+
+The fix is a second attributes file that the sync workflow swaps in for the Space
+only, plus a step that checks the three largest files are real files and fails the
+build if any of them is still a pointer. Order matters inside that file: the broad
+line-ending rule has to come first, because the last matching pattern wins and putting
+it last would turn text handling back on for every binary listed above it.
+
+What I took from it is that a green pipeline tells you about the pipeline, not about
+what it produced.
+
+## Making it run without me
+
+The pipeline is written as Dagster assets with the dependency graph declared rather
+than implied by the order I call things, plus asset checks that assert the fact table
+is populated and the benchmark is present. The same graph exists as an Airflow DAG,
+because a lot of teams standardise on Airflow and I wanted the pipeline to be portable
+to either.
+
+Three GitHub Actions workflows keep it going without me touching anything.
+
+| Workflow | When | What it does |
+|---|---|---|
+| `ci.yml` | every push and PR | lint, tests on Python 3.10, 3.11 and 3.12, dbt project parses, Dagster assets load |
+| `refresh.yml` | Mondays 07:00 UTC | re-ingest, rebuild, validate, retrain, rebuild this results table, commit |
+| `sync-huggingface.yml` | every push to main | mirror the repo to the Space, which rebuilds the Docker image |
+| `keepalive.yml` | every 6 hours | ping the Space so it never hits the 48 hour idle timeout |
+
+The keepalive one exists because a free Space sleeps after 48 hours without traffic,
+and the next visitor then waits about a minute on a loading screen. It polls the Hub
+API for `runtime.stage` rather than just curling the app, because a sleeping Space
+serves a holding page while its container boots and a plain HTTP 200 check would pass
+on that holding page.
+
+There is also a REST API, mostly so the forecasts are usable by something other than
+my own dashboard.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /health` | whether the warehouse and model files are actually there |
+| `GET /balancing-authorities` | the 12 regions with coordinates and timezones |
+| `GET /demand/{ba_code}` | recent demand, weather and the EIA forecast for one region |
+| `POST /forecast` | a 24 hour forecast with P10 and P90 bands |
+| `GET /leaderboard` | the model scores |
+| `GET /forecast-accuracy` | the EIA's own error broken down per region |
+| `GET /anomalies` | flagged hours, filterable by severity |
+| `GET /data-quality` | the latest quality scorecard |
+| `POST /ask` | a natural language question answered through the guarded SQL agent |
+
+## How I decided it was good enough
+
+Four things, in order of how much I trust them.
+
+The split is chronological and the test window is the most recent 90 days, held back
+entirely. Validation is the 60 days before that, used only for early stopping. The
+point model stopped at iteration 2,991.
+
+The benchmark is external. I am not marking my own homework, because the EIA number
+comes out of the same file as the actuals.
+
+The features are tested for leakage directly. `tests/test_features.py` reconstructs
+what each lag and rolling window should be from the raw series and compares.
+
+The warehouse is tested end to end against a synthetic grid built in code with a
+daily cycle, a weekly cycle, a yearly temperature cycle and the V shaped temperature
+response. Correct answers are known by construction, so the tests can assert on them.
+
+Sixteen quality checks run over the real warehouse across six categories, ten of them
+marked critical. A failing critical check stops the pipeline before a model is trained
+or exported, so a broken model cannot reach the live site.
+
+## Running it
+
+You need Python 3.10 to 3.12 and a free EIA API key. A free Groq key is optional and
+only turns on the natural language tab.
+
+```
 git clone https://github.com/adwitiyashukla/gridpulse.git
 cd gridpulse
 
 python -m venv .venv
-source .venv/bin/activate
+.venv\Scripts\activate
 pip install -r requirements-dev.txt
 pip install -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu
 pip install -e . --no-deps
 
-cp .env.example .env
-
+copy .env.example .env
 gridpulse probe
 gridpulse all
 streamlit run app.py
 ```
 
-### Stages
+On macOS or Linux use `source .venv/bin/activate` and `cp` instead of `copy`.
 
-```bash
-gridpulse probe       # validate API credentials and response contracts
-gridpulse ingest      # EIA + weather into the bronze layer
-gridpulse build       # bronze -> silver -> gold star schema
-gridpulse quality     # 16 data quality checks
-gridpulse train       # train and score every model
-gridpulse anomalies   # three-detector anomaly consensus
-gridpulse export      # slim DuckDB artifact for the app
+`gridpulse all` takes roughly 20 to 40 minutes, most of it downloading. Individual
+stages:
+
+```
+gridpulse probe       check the API key and that the response looks how I expect
+gridpulse ingest      pull EIA and weather into the bronze layer
+gridpulse build       bronze to silver to the gold star schema
+gridpulse quality     run the 16 checks
+gridpulse train       train and score every model
+gridpulse anomalies   run the three anomaly detectors
+gridpulse export      write the slim database the app ships with
 ```
 
-```bash
-make dagster   # asset lineage UI on :3000
-make dbt       # build and test the dbt marts
-make api       # FastAPI + OpenAPI docs on :8000
-make app       # Streamlit dashboard on :8501
-make test      # pytest with coverage
-make docker    # API and dashboard in containers
+The app and the tests need none of that. The app database and the trained models are
+committed, so `streamlit run app.py` works on a fresh clone with nothing configured,
+and `pytest` needs no internet and no keys at all.
+
+```
+make dagster   asset lineage UI on port 3000
+make dbt       build and test the dbt marts
+make api       FastAPI with OpenAPI docs on port 8000
+make docker    API and dashboard in containers
 ```
 
----
-
-## Project structure
+## What is in the repo
 
 ```
 gridpulse/
-├── src/gridpulse/
-│   ├── config.py              Balancing authority registry, paths, settings
-│   ├── cli.py                 Entry point for every pipeline stage
-│   ├── ingestion/             EIA-930 and Open-Meteo extraction, async with retries
-│   ├── warehouse/             DuckDB layers and the app export
-│   ├── quality/               16 data quality checks across 6 dimensions
-│   ├── features/              40 features, leakage-tested
-│   ├── models/                metrics, baselines, LightGBM, LSTM, Transformer, anomalies
-│   ├── agent/text2sql.py      Guarded LLM text-to-SQL
-│   └── api/main.py            FastAPI service
-├── dbt/gridpulse/             5 dbt models, 20+ tests
-├── orchestration/             Dagster assets and an Airflow DAG mirror
-├── app.py                     Streamlit dashboard
-├── tests/                     Offline test suite
-└── .github/workflows/         CI and the weekly data refresh
+  src/gridpulse/
+    config.py        the 12 regions, their timezones and load centres, paths, settings
+    cli.py           one entry point for every pipeline stage
+    ingestion/       EIA and Open-Meteo download, async, resumable, retry rules in one place
+    warehouse/       bronze to silver to gold in DuckDB, plus the slim app export
+    quality/         16 checks across 6 categories, results saved to the warehouse
+    features/        the 39 features and the chronological split
+    models/          metrics, baselines, LightGBM, LSTM, Transformer, anomaly detectors
+    agent/           natural language to SQL, behind six guards
+    api/             FastAPI service with OpenAPI docs
+  dbt/gridpulse/     5 marts and 20+ dbt tests on top of the gold layer
+  orchestration/     Dagster assets, and the same pipeline written as an Airflow DAG
+  app.py             the Streamlit dashboard
+  tests/             136 tests, no network required
+  .github/workflows/ CI, the weekly refresh, the Space sync, the keepalive ping
 ```
 
----
+## Tests
 
-## REST API
-
-```bash
-uvicorn gridpulse.api.main:app --port 8000
 ```
-
-| Endpoint | Returns |
-|---|---|
-| `GET /health` | Service, warehouse and model artifact status |
-| `GET /balancing-authorities` | The 12 regions covered, with coordinates |
-| `GET /demand/{ba_code}` | Recent demand, weather and the EIA forecast for one region |
-| `POST /forecast` | 24-hour forecast with P10/P90 bands |
-| `GET /leaderboard` | Model accuracy against the EIA benchmark |
-| `GET /forecast-accuracy` | EIA forecast error per region |
-| `GET /anomalies` | Flagged hours, filterable by severity |
-| `GET /data-quality` | Latest quality scorecard |
-| `POST /ask` | Natural-language question answered via guarded SQL |
-
-The SQL agent has six checks before anything runs: a read-only connection, one
-statement only, SELECT or WITH only, a banned keyword list, a list of allowed tables
-and a row limit. The app always shows the SQL it wrote.
-`tests/test_sql_guard.py` has the attacks I tested it against.
-
----
-
-## Data quality
-
-| Dimension | Checks |
-|---|---|
-| Completeness | Demand reported, no missing hours, weather joined, all 12 regions present |
-| Validity | Demand positive, magnitude within 0.2x-5x the regional median, dispersion sane, meter not frozen, temperature physically possible |
-| Uniqueness | One row per region per hour, catching the DST fall-back duplicate |
-| Consistency | Hour-on-hour ramp within bounds, referential integrity to `dim_ba` and `dim_date` |
-| Timeliness | Warehouse holds data from the last 48 hours |
-| Accuracy | The EIA benchmark forecast is present |
-
-Results are saved to `dq_results` and `dq_scorecard` so I can look back at how quality
-changed over time. If a critical check fails the pipeline stops, so a broken model
-never reaches the live site.
-
----
-
-## Testing
-
-```bash
 pytest -v --cov=gridpulse
 ```
 
-140 tests, and they need no internet and no API keys. The fixtures build a fake grid
-with a daily cycle, a weekly cycle, a yearly temperature cycle and the V-shaped link
-between temperature and demand, then build a real DuckDB warehouse from it.
+136 tests. The ones I would read first:
 
----
-
-## Deployment
-
-| Target | How |
+| Test | What it pins down |
 |---|---|
-| Local | `streamlit run app.py` after `gridpulse all` |
-| Hugging Face Spaces | Repository `Dockerfile` on port 7860, mirrored by `sync-huggingface.yml` on every push to `main` |
-| Streamlit Community Cloud | Points at this repo and `app.py`. `requirements.txt` is 11 packages, no Dagster, dbt, Airflow or PyTorch |
-| Docker | `docker compose up` runs the API and dashboard together |
-| Weekly refresh | `refresh.yml` re-ingests, rebuilds, validates, retrains and commits every Monday |
+| `test_features.py::test_rolling_features_do_not_leak_the_present` | Rolling statistics are shifted by the full 24 hour horizon |
+| `test_features.py::test_lag_features_reference_the_correct_past_value` | `demand_lag_24h` at time t really is demand at t minus 24h |
+| `test_warehouse.py::test_hourly_spine_is_continuous` | No missing hours, measured in epoch seconds so DST cannot fake a gap |
+| `test_warehouse.py::test_grain_is_unique` | One row per region per hour, which catches the DST fall back duplicate |
+| `test_sql_guard.py::test_stacked_statement_is_refused` | The SQL guard blocks two statements chained with a semicolon |
+| `test_sql_guard.py::test_comment_hidden_payload_is_neutralised` | A DELETE hidden behind a SQL comment never reaches the database |
+| `test_metrics.py::test_non_finite_and_nonpositive_values_are_excluded` | The reported sample size matches the rows the metrics were computed on |
 
-The app database and the trained models are committed, so the deployed app starts
-straight away without building a warehouse or training anything.
+That last one exists because of a bug. My evaluation function counted every valid
+number when reporting how many observations it used, but computed the metrics only on
+rows that were valid and above zero. Every metric was describing a smaller set than
+the number printed beside it. The test caught it and the test was right.
 
----
+## The natural language tab
 
-## Tech stack
+There is a tab where you can ask a question in English and get SQL and a chart back.
+An LLM writes the SQL, which means I do not trust it. Before anything runs it has to
+pass a read-only connection, a single statement rule, a SELECT or WITH only rule, a
+banned keyword list applied after comments are stripped out, a list of allowed tables
+that blocks the system catalogue, and a row limit. The app always shows you the query
+it generated, because an answer you cannot check is an answer you should not trust.
+`tests/test_sql_guard.py` holds the attacks I tried against it, including stacking two
+statements and hiding a DELETE behind a comment.
 
-| Layer | Technology |
-|---|---|
-| Language | Python 3.10-3.12 |
-| Extraction | `httpx` async, paginated, watermarked |
-| Storage | Parquet bronze/silver/gold, DuckDB warehouse |
-| Transformation | SQL and dbt (`dbt-duckdb`) |
-| Orchestration | Dagster, Apache Airflow, GitHub Actions |
-| Modelling | LightGBM, PyTorch, scikit-learn, statsmodels |
-| Tracking | MLflow |
-| Serving | FastAPI, Streamlit, Docker |
-| Agent | Groq (Llama 3.3) with SQL guardrails |
+## Anomaly detection
 
----
+Three detectors have to agree before an hour is called unusual: a median absolute
+deviation z-score computed within region, hour of day and month cells, an Isolation
+Forest over demand, ramp rate and temperature sensitivity, and a small autoencoder
+trained on daily load shapes normalised by each day's own median. Severity rises with
+the number of detectors that agree. Over 798,940 scored hours it flags 21,106, which
+is 2.642%, and only 49 of those are high severity.
 
-## Data sources
+Flagged readings are kept in the warehouse rather than deleted. A meter reporting the
+same value for six hours straight is not steady, it is stuck, and dropping that row
+destroys the only evidence the meter broke. The modelling step decides separately what
+to exclude.
 
-| Source | Provides | Licence |
-|---|---|---|
-| [EIA Form 930](https://www.eia.gov/opendata/) | Hourly demand, day-ahead forecast, net generation, interchange | US Government, public domain |
-| [Open-Meteo](https://open-meteo.com/) | Hourly ERA5 archive and forecast weather | CC BY 4.0 |
+## Stack
 
----
+Python, httpx for async downloads, DuckDB and Parquet for storage, dbt for the marts,
+LightGBM and PyTorch for the models, scikit-learn for anomaly detection, MLflow for
+run tracking, Dagster and Airflow for orchestration, FastAPI and Streamlit for serving,
+Docker for the Space, GitHub Actions for CI and the weekly retrain.
 
-## Licence
-
-MIT, see [LICENSE](LICENSE).
+MIT licence, see [LICENSE](LICENSE).

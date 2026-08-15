@@ -30,8 +30,8 @@ QUANTILE_MODELS = {"gbm_p10", "gbm_p50", "gbm_p90"}
 
 def render_table(rows: list[dict]) -> str:
     lines = [
-        "| Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Skill vs EIA |",
-        "|---|---|---|---|---|---|---|",
+        "| Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Hours scored | Skill vs EIA |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for row in sorted(rows, key=lambda r: r.get("mape_pct", 999)):
         if row["model"] in QUANTILE_MODELS:
@@ -47,7 +47,8 @@ def render_table(rows: list[dict]) -> str:
         lines.append(
             f"| {name} | {row['mape_pct']:.3f} | {row['mae_mwh']:,.0f} | "
             f"{row['rmse_mwh']:,.0f} | {row['r2']:.4f} | "
-            f"{row.get('peak_hour_mape_pct', float('nan')):.3f} | {skill_cell} |"
+            f"{row.get('peak_hour_mape_pct', float('nan')):.3f} | "
+            f"{row.get('n_obs', 0):,} | {skill_cell} |"
         )
     return "\n".join(lines)
 
@@ -66,21 +67,16 @@ def main() -> int:
         if isinstance(skill, int | float) and skill > 0:
             label = PRETTY.get(head["best_model"], head["best_model"]).replace("*", "")
             table = (
-                f"> ### {skill:.1f}% more accurate than the EIA's own day-ahead forecast\n"
-                f">\n"
-                f"> **{label}** reaches **{head['best_mape_pct']:.3f}% MAPE** against the "
-                f"EIA's **{head['eia_benchmark_mape_pct']:.3f}%**, measured over "
-                f"**{head['test_observations']:,}** out-of-sample hours across 12 balancing "
-                f"authorities.\n"
-                f">\n"
-                f"> The model never sees the test window during training, and the EIA "
-                f"benchmark is the forecast the US government actually published.\n\n" + table
+                f"{label} gets {head['best_mape_pct']:.3f}% MAPE where the EIA's own "
+                f"published forecast gets {head['eia_benchmark_mape_pct']:.3f}%, which is "
+                f"{skill:.1f}% better, measured on {head['test_observations']:,} test hours "
+                f"from {head['test_window_start']} onwards across 12 balancing authorities.\n\n"
+                + table
             )
 
     table += (
-        "\n\n<sub>P10/P50/P90 quantile models are omitted above: they define the "
-        "prediction interval rather than competing as point forecasts. Interval "
-        "calibration is reported separately.</sub>"
+        "\n\nThe P10, P50 and P90 rows are left out of this table. They draw the prediction "
+        "interval rather than competing as point forecasts."
     )
 
     text = README.read_text(encoding="utf-8")
