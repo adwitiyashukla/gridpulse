@@ -13,18 +13,24 @@ short_description: Day-ahead grid demand forecasting benchmarked vs the EIA
 # GridPulse
 
 Day-ahead electricity demand forecasting for US balancing authorities,
-benchmarked against the **EIA's own published day-ahead forecast**.
+benchmarked against the EIA's own published day-ahead forecast.
 
-| Model | MAPE | vs EIA |
-|---|---|---|
-| **LightGBM hybrid** (+ EIA forecast as input) | **2.797%** | **+24.1%** |
-| **LightGBM** (global, weather and calendar only) | 3.683% | +0.1% |
-| _EIA official forecast_ | 3.686% | benchmark |
-| Seasonal naive (24h) | 5.657% | -53.5% |
-| Weekly naive (168h) | 9.328% | -153.1% |
+<!-- RESULTS:START -->
+LightGBM hybrid (+ EIA forecast as input) gets 2.877% MAPE where the EIA's own published forecast gets 3.655%, which is 21.3% better, measured on 25,918 test hours from 2026-05-17 onwards across 12 balancing authorities.
 
-Measured over 25,925 out-of-sample hours across 12 balancing authorities, split by
-date so the model never sees the test window.
+| Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Hours scored | Skill vs EIA |
+|---|---|---|---|---|---|---|---|
+| **LightGBM hybrid** (+ EIA forecast as input) | 2.877 | 1,136 | 2,002 | 0.9959 | 3.435 | 25,918 | **+21.3%** |
+| **LightGBM** (global, quantile) | 3.644 | 1,430 | 2,372 | 0.9943 | 4.657 | 25,918 | **+0.3%** |
+| _EIA official forecast_ | 3.655 | 1,405 | 2,487 | 0.9938 | 2.848 | 25,342 | - (benchmark) |
+| **Ensemble** (GBM + LSTM) | 4.490 | 1,694 | 2,688 | 0.9927 | 3.622 | 25,918 | -22.9% |
+| Seasonal naive (24h) | 5.572 | 1,942 | 3,206 | 0.9896 | 5.271 | 25,918 | -52.5% |
+| **LSTM** encoder | 5.874 | 2,136 | 3,481 | 0.9877 | 2.997 | 25,914 | -60.7% |
+| **Transformer** encoder | 8.328 | 3,301 | 4,913 | 0.9755 | 6.073 | 25,914 | -127.8% |
+| Weekly naive (168h) | 9.460 | 3,566 | 6,072 | 0.9625 | 13.093 | 25,918 | -158.8% |
+
+The P10, P50 and P90 rows are left out of this table. They draw the prediction interval rather than competing as point forecasts.
+<!-- RESULTS:END -->
 
 ## What you can do here
 
@@ -56,15 +62,15 @@ This Space is just the website. Behind it there is a full data pipeline:
 
 ## Setup
 
-The **Ask the Grid** tab needs a `GROQ_API_KEY` under
-**Settings, Variables and secrets**. Keys are free at
+The Ask the Grid tab needs a `GROQ_API_KEY` under
+Settings, Variables and secrets. Keys are free at
 [console.groq.com/keys](https://console.groq.com/keys). Everything else works with
 no setup at all.
 
 ## Source
 
 Full pipeline, tests, orchestration and documentation:
-**[github.com/adwitiyashukla/gridpulse](https://github.com/adwitiyashukla/gridpulse)**
+[github.com/adwitiyashukla/gridpulse](https://github.com/adwitiyashukla/gridpulse)
 
 Data: [US EIA Form 930](https://www.eia.gov/opendata/) and
 [Open-Meteo](https://open-meteo.com/).

@@ -6,6 +6,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = REPO_ROOT / "README.md"
+SPACE_README = REPO_ROOT / "deploy" / "README_SPACE.md"
 LEADERBOARD = REPO_ROOT / "artifacts" / "leaderboard.json"
 HEADLINE = REPO_ROOT / "artifacts" / "headline.json"
 
@@ -79,16 +80,20 @@ def main() -> int:
         "interval rather than competing as point forecasts."
     )
 
-    text = README.read_text(encoding="utf-8")
-    if START not in text or END not in text:
-        print("README is missing the RESULTS markers.", file=sys.stderr)
+    failed = False
+    for path in (README, SPACE_README):
+        text = path.read_text(encoding="utf-8")
+        if START not in text or END not in text:
+            print(f"{path.name} is missing the RESULTS markers.", file=sys.stderr)
+            failed = True
+            continue
+        before = text.split(START)[0]
+        after = text.split(END)[1]
+        path.write_text(f"{before}{START}\n{table}\n{END}{after}", encoding="utf-8")
+        print(f"{path.name} results table updated.")
+
+    if failed:
         return 1
-
-    before = text.split(START)[0]
-    after = text.split(END)[1]
-    README.write_text(f"{before}{START}\n{table}\n{END}{after}", encoding="utf-8")
-
-    print("README results table updated.")
     print(table)
     return 0
 
