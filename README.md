@@ -12,22 +12,6 @@ same hours.
 Live: [Hugging Face](https://huggingface.co/spaces/adwitiyashukla/gridpulse)
 or [Streamlit Cloud](https://gridpulse-ai.streamlit.app). Both run off the same commit.
 
-## Why I didn't invent my own baseline
-
-The easy version of this project is to build a load forecaster, compare it to a
-seasonal naive baseline, beat it by a mile, and put the number in a README. I
-started down that road and stopped, because that comparison proves almost nothing.
-Electricity demand at 3pm today looks a lot like 3pm yesterday. Beating "yesterday"
-is not hard, and every forecasting project on GitHub has already done it.
-
-Then I found that the EIA publishes each region's own day-ahead forecast in the
-same dataset as the actual demand, hour for hour. That is not a baseline anyone
-made up. It is what grid operators submitted in advance and then operated against,
-with real money attached to being wrong.
-
-So that became the thing to beat. It also means anyone can check my numbers,
-because the benchmark ships with the data instead of living in my code.
-
 ## Where the data comes from
 
 Two public sources, no synthetic data anywhere in the results.
@@ -150,8 +134,9 @@ than more infrastructure.
 The catch is scale. PJM peaks near 165,000 MW and TVA sits around 18,000 MW, so an
 unscaled loss would let PJM dominate training completely. Each region's target is
 normalised by its own median and interquartile range before training and inverted
-afterwards. Why median and IQR rather than mean and standard deviation is the first
-story in the next section.
+afterwards. I use median and IQR rather than mean and standard deviation because a single
+absurd reading can drag a mean and a standard deviation anywhere, and 40 bad
+readings in this dataset once did exactly that.
 
 I also train a second variant that takes the EIA's published forecast as an input
 feature. It is the strongest model in the table, and it is solving an easier problem:
@@ -202,88 +187,6 @@ naive baseline. With 12 series and a few years of data that is roughly what the
 literature would predict, and gradient boosting on good features is simply the right
 tool at this size. I kept them in because comparing the approaches was the point.
 
-## Three things that broke
-
-Twelve things went wrong badly enough that I had to stop and work out why. These
-three taught me the most.
-
-### Forty readings out of eight hundred thousand
-
-LightGBM stopped after 6 trees. Final score was 53.9% MAPE with an R2 of -131, which
-is worse than predicting the mean every time. It also ranked day of year and cloud
-cover above yesterday's demand at the same hour, which makes no sense for electricity.
-
-Rather than guess, I wrote a script to print the scaling statistics the model had
-fitted. PJM came back with a mean of 158,481 MW and a standard deviation of
-10,739,790 MW. PJM's real range is roughly 70,000 to 165,000 MW, so a standard
-deviation of 10.7 million is impossible. Then I scored each region separately: PJM
-was 583%, TVA was 20%, and every other region sat between 2.9% and 7.3%. Exactly the
-two regions with broken statistics. The median error was 4.2% while the mean was
-53.9%, and the worst 1% of rows accounted for 47.5% of all the error, which is the
-signature of a handful of extreme values rather than a bad model.
-
-The cause was 40 physically impossible readings in roughly 800,000 hours. I was
-scaling with mean and standard deviation, and both can be dragged anywhere by one
-absurd value. Forty rows broke the scaling, and the broken scaling broke every
-prediction for those regions.
-
-I switched both scalers to median and IQR, excluded readings outside 0.2x to 5x a
-region's own median from training, and added two critical quality checks: one for
-impossible magnitudes and one that fails if any region's standard deviation exceeds
-its mean. MAPE went from 53.9% to 3.68% and R2 from -131 to 0.994.
-
-The part I keep coming back to is that my quality suite had 13 checks at the time and
-all 13 passed. It checked that demand was never below zero. It never occurred to me
-to check whether demand might be far too large.
-
-### A spike filter that filtered nothing
-
-After adding spike removal the charts still drew tall vertical spikes near the right
-edge. My first attempt flagged a point if it sat more than 25% away from both of its
-neighbours in the same direction. It caught nothing at all.
-
-I wrote a second script to print the last 60 hours with every flag beside them, and
-there were two separate reasons. One spike was 21.5% away on one side and 26.2% on
-the other, so it slipped under a 25% threshold that needed both. The other was the
-very last row in the series, so it had no next neighbour and my condition could never
-be true for it.
-
-Comparing a point against its neighbours cannot work at the ends of a series, and the
-end is exactly where the newest and least settled data sits. I replaced it with a
-comparison against a 5 hour rolling median centred on each point. Total demand moves
-smoothly over five hours, so a real day never strays far from its local median, a bad
-reading stands out whichever side it falls on, and a partial window at the end is
-still perfectly usable.
-
-### A green pipeline that shipped a broken image
-
-I added a `.gitattributes` file to stop Git on Windows rewriting line endings, which
-was making a repository nobody had edited show 910 changed lines. That fix was
-correct. It also broke my Hugging Face Space.
-
-Every Space comes with its own `.gitattributes` whose job is to tell Git which large
-files live in Git LFS. My sync workflow uploads the whole repository, so my new file
-replaced theirs. Hugging Face automatically puts anything over about 10 MB into LFS,
-which here means the two 35 MB model files and the app database. Git only swaps an
-LFS file back for the real thing when `.gitattributes` declares a filter for it, so
-once those lines were gone the Docker build checked out 133 byte pointer files and
-copied a pointer into the image instead of my database.
-
-The linter passed. The tests passed. The sync passed. The Docker build passed. The
-container health check passed. The only place the failure appeared was on the page
-itself, saying the DuckDB file was not a valid DuckDB database. Meanwhile the exact
-same repository was fine on Streamlit Cloud, because on GitHub those files are
-ordinary blobs and never went near LFS.
-
-The fix is a second attributes file that the sync workflow swaps in for the Space
-only, plus a step that checks the three largest files are real files and fails the
-build if any of them is still a pointer. Order matters inside that file: the broad
-line-ending rule has to come first, because the last matching pattern wins and putting
-it last would turn text handling back on for every binary listed above it.
-
-What I took from it is that a green pipeline tells you about the pipeline, not about
-what it produced.
-
 ## Making it run without me
 
 The pipeline is written as Dagster assets with the dependency graph declared rather
@@ -321,28 +224,6 @@ my own dashboard.
 | `GET /anomalies` | flagged hours, filterable by severity |
 | `GET /data-quality` | the latest quality scorecard |
 | `POST /ask` | a natural language question answered through the guarded SQL agent |
-
-## How I decided it was good enough
-
-Four things, in order of how much I trust them.
-
-The split is chronological and the test window is the most recent 90 days, held back
-entirely. Validation is the 60 days before that, used only for early stopping. The
-point model used all 3,000 boosting rounds, so early stopping never fired.
-
-The benchmark is external. I am not marking my own homework, because the EIA number
-comes out of the same file as the actuals.
-
-The features are tested for leakage directly. `tests/test_features.py` reconstructs
-what each lag and rolling window should be from the raw series and compares.
-
-The warehouse is tested end to end against a synthetic grid built in code with a
-daily cycle, a weekly cycle, a yearly temperature cycle and the V shaped temperature
-response. Correct answers are known by construction, so the tests can assert on them.
-
-Sixteen quality checks run over the real warehouse across six categories, ten of them
-marked critical. A failing critical check stops the pipeline before a model is trained
-or exported, so a broken model cannot reach the live site.
 
 ## Running it
 
@@ -460,11 +341,6 @@ same value for six hours straight is not steady, it is stuck, and dropping that 
 destroys the only evidence the meter broke. The modelling step decides separately what
 to exclude.
 
-## Stack
+## Licence
 
-Python, httpx for async downloads, DuckDB and Parquet for storage, dbt for the marts,
-LightGBM and PyTorch for the models, scikit-learn for anomaly detection, MLflow for
-run tracking, Dagster and Airflow for orchestration, FastAPI and Streamlit for serving,
-Docker for the Space, GitHub Actions for CI and the weekly retrain.
-
-MIT licence, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
