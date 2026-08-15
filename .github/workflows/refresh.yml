@@ -22,7 +22,7 @@ jobs:
   refresh:
     name: Refresh warehouse and artifacts
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +31,14 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+
+      - name: Restore the bronze layer from the last run
+        uses: actions/cache@v4
+        with:
+          path: data/bronze
+          key: bronze-${{ github.run_id }}
+          restore-keys: |
+            bronze-
 
       - name: Install dependencies
         run: |
