@@ -180,14 +180,14 @@ The P10, P50 and P90 rows are left out of this table. They draw the prediction i
 Some things those numbers do not say.
 
 The prediction interval is too narrow. The P10 to P90 band should contain 80% of
-actual values and contains 58.08%. The model is more confident than it has earned.
+actual values and contains 58.34%. The model is more confident than it has earned.
 Conformal calibration on held-out residuals is the fix and I have not done it yet.
 
-The EIA is still better than me at peak hours, 2.885% against my 3.483%. Peak hours
+The EIA is still better than me at peak hours, 2.848% against my 3.435%. Peak hours
 are exactly where a miss costs the most, because that is when generation gets bought
 at short notice, so this is the gap that matters most and I am losing it.
 
-The EIA row is scored on 25,670 hours where every other row has 25,925. That is not
+The EIA row is scored on 25,342 hours where every other row has 25,918. That is not
 a mistake in the table. Their published forecast is missing for a few hundred hours,
 and I score each model only on hours where that model produced a prediction, rather
 than filling gaps with something invented.
@@ -328,7 +328,7 @@ Four things, in order of how much I trust them.
 
 The split is chronological and the test window is the most recent 90 days, held back
 entirely. Validation is the 60 days before that, used only for early stopping. The
-point model stopped at iteration 2,991.
+point model used all 3,000 boosting rounds, so early stopping never fired.
 
 The benchmark is external. I am not marking my own homework, because the EIA number
 comes out of the same file as the actuals.
@@ -408,7 +408,7 @@ gridpulse/
   dbt/gridpulse/     5 marts and 20+ dbt tests on top of the gold layer
   orchestration/     Dagster assets, and the same pipeline written as an Airflow DAG
   app.py             the Streamlit dashboard
-  tests/             136 tests, no network required
+  tests/             137 tests, no network required
   .github/workflows/ CI, the weekly refresh, the Space sync, the keepalive ping
 ```
 
@@ -418,7 +418,7 @@ gridpulse/
 pytest -v --cov=gridpulse
 ```
 
-136 tests. The ones I would read first:
+137 tests. The ones I would read first:
 
 | Test | What it pins down |
 |---|---|
@@ -452,8 +452,8 @@ Three detectors have to agree before an hour is called unusual: a median absolut
 deviation z-score computed within region, hour of day and month cells, an Isolation
 Forest over demand, ramp rate and temperature sensitivity, and a small autoencoder
 trained on daily load shapes normalised by each day's own median. Severity rises with
-the number of detectors that agree. Over 798,940 scored hours it flags 21,106, which
-is 2.642%, and only 49 of those are high severity.
+the number of detectors that agree. Over 800,445 scored hours it flags 21,165, which
+is 2.644%, and only 45 of those are high severity.
 
 Flagged readings are kept in the warehouse rather than deleted. A meter reporting the
 same value for six hours straight is not steady, it is stuck, and dropping that row
