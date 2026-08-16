@@ -191,9 +191,7 @@ tool at this size. I kept them in because comparing the approaches was the point
 
 The pipeline is written as Dagster assets with the dependency graph declared rather
 than implied by the order I call things, plus asset checks that assert the fact table
-is populated and the benchmark is present. The same graph exists as an Airflow DAG,
-because a lot of teams standardise on Airflow and I wanted the pipeline to be portable
-to either.
+is populated and the benchmark is present.
 
 Three GitHub Actions workflows keep it going without me touching anything.
 
@@ -287,7 +285,7 @@ gridpulse/
     agent/           natural language to SQL, behind six guards
     api/             FastAPI service with OpenAPI docs
   dbt/gridpulse/     5 marts and 20+ dbt tests on top of the gold layer
-  orchestration/     Dagster assets, and the same pipeline written as an Airflow DAG
+  orchestration/     Dagster assets, checks and schedules
   app.py             the Streamlit dashboard
   tests/             137 tests, no network required
   .github/workflows/ CI, the weekly refresh, the Space sync, the keepalive ping

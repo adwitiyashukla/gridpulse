@@ -702,7 +702,7 @@ Open-Meteo      --+       |
 | Downloading data | Python, `httpx` async, only fetching what is new |
 | Storage | Parquet in bronze/silver/gold, DuckDB warehouse |
 | Transformations | SQL and dbt |
-| Scheduling | Dagster assets, the same pipeline as an Airflow DAG, GitHub Actions |
+| Scheduling | Dagster assets, GitHub Actions |
 | Quality | 16 checks across 6 categories |
 | Machine learning | LightGBM with quantiles, PyTorch LSTM and Transformer |
 | Experiment tracking | MLflow |

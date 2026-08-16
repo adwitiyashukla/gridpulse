@@ -43,9 +43,6 @@ storage/
 mlruns/
 mlartifacts/
 
-airflow.db
-airflow-webserver.pid
-standalone_admin_password.txt
 
 .DS_Store
 Thumbs.db
