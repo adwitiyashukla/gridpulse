@@ -4,14 +4,14 @@
   "window_days": 400,
   "tables": {
     "dim_ba": 12,
-    "dim_date": 2806,
-    "fact_demand_hourly": 115170,
-    "fact_forecast_accuracy": 114073,
-    "model_predictions": 25918,
-    "anomaly_scores": 115198,
+    "dim_date": 2807,
+    "fact_demand_hourly": 115203,
+    "fact_forecast_accuracy": 114025,
+    "model_predictions": 25914,
+    "anomaly_scores": 115194,
     "model_scores": 11,
     "dq_results": 16,
     "dq_scorecard": 6
   },
-  "exported_at_utc": "2026-08-15T14:25:31.397952+00:00"
+  "exported_at_utc": "2026-08-17T08:08:28.466267+00:00"
 }

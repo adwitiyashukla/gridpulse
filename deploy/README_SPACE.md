@@ -16,18 +16,18 @@ Day-ahead electricity demand forecasting for US balancing authorities,
 benchmarked against the EIA's own published day-ahead forecast.
 
 <!-- RESULTS:START -->
-LightGBM hybrid (+ EIA forecast as input) gets 2.877% MAPE where the EIA's own published forecast gets 3.655%, which is 21.3% better, measured on 25,918 test hours from 2026-05-17 onwards across 12 balancing authorities.
+LightGBM hybrid (+ EIA forecast as input) gets 2.889% MAPE where the EIA's own published forecast gets 3.631%, which is 20.4% better, measured on 25,914 test hours from 2026-05-19 onwards across 12 balancing authorities.
 
 | Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Hours scored | Skill vs EIA |
 |---|---|---|---|---|---|---|---|
-| **LightGBM hybrid** (+ EIA forecast as input) | 2.877 | 1,136 | 2,002 | 0.9959 | 3.435 | 25,918 | **+21.3%** |
-| **LightGBM** (global, quantile) | 3.644 | 1,430 | 2,372 | 0.9943 | 4.657 | 25,918 | **+0.3%** |
-| _EIA official forecast_ | 3.655 | 1,405 | 2,487 | 0.9938 | 2.848 | 25,342 | - (benchmark) |
-| **Ensemble** (GBM + LSTM) | 4.490 | 1,694 | 2,688 | 0.9927 | 3.622 | 25,918 | -22.9% |
-| Seasonal naive (24h) | 5.572 | 1,942 | 3,206 | 0.9896 | 5.271 | 25,918 | -52.5% |
-| **LSTM** encoder | 5.874 | 2,136 | 3,481 | 0.9877 | 2.997 | 25,914 | -60.7% |
-| **Transformer** encoder | 8.328 | 3,301 | 4,913 | 0.9755 | 6.073 | 25,914 | -127.8% |
-| Weekly naive (168h) | 9.460 | 3,566 | 6,072 | 0.9625 | 13.093 | 25,918 | -158.8% |
+| **LightGBM hybrid** (+ EIA forecast as input) | 2.889 | 1,151 | 2,016 | 0.9959 | 3.428 | 25,914 | **+20.4%** |
+| _EIA official forecast_ | 3.631 | 1,398 | 2,480 | 0.9939 | 2.825 | 25,300 | - (benchmark) |
+| **LightGBM** (global, quantile) | 3.654 | 1,442 | 2,382 | 0.9942 | 4.665 | 25,914 | -0.6% |
+| **Ensemble** (GBM + LSTM) | 4.166 | 1,484 | 2,260 | 0.9948 | 3.610 | 25,914 | -14.7% |
+| **LSTM** encoder | 5.188 | 1,685 | 2,498 | 0.9937 | 2.923 | 25,908 | -42.9% |
+| Seasonal naive (24h) | 5.477 | 1,906 | 3,126 | 0.9901 | 4.962 | 25,914 | -50.8% |
+| **Transformer** encoder | 5.766 | 2,182 | 3,323 | 0.9888 | 4.436 | 25,908 | -58.8% |
+| Weekly naive (168h) | 9.408 | 3,523 | 5,975 | 0.9638 | 12.630 | 25,914 | -159.1% |
 
 The P10, P50 and P90 rows are left out of this table. They draw the prediction interval rather than competing as point forecasts.
 <!-- RESULTS:END -->
