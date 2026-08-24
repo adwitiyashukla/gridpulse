@@ -1,19 +1,19 @@
 {
-  "hours_scored": 800945,
-  "anomalies_found": 21168,
-  "anomaly_rate_pct": 2.643,
+  "hours_scored": 802972,
+  "anomalies_found": 21236,
+  "anomaly_rate_pct": 2.645,
   "by_type": {
-    "multivariate_outlier": 7927,
-    "unusual_daily_shape": 7716,
+    "multivariate_outlier": 7957,
+    "unusual_daily_shape": 7755,
     "frozen_telemetry": 2712,
-    "demand_spike": 2658,
+    "demand_spike": 2657,
     "extreme_ramp": 127,
     "demand_drop": 28
   },
   "by_severity": {
-    "none": 779777,
-    "low": 20799,
-    "medium": 318,
-    "high": 51
+    "none": 781736,
+    "low": 20889,
+    "medium": 300,
+    "high": 47
   }
 }

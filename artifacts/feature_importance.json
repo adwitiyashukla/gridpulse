@@ -1,122 +1,122 @@
 [
   {
     "feature":"cooling_x_hour",
-    "gain":3025526.455670774
+    "gain":3025647.4618413895
   },
   {
     "feature":"temp_roll_mean_24h",
-    "gain":1574639.573950991
+    "gain":1574270.6439789534
   },
   {
     "feature":"ba_code",
-    "gain":1273393.3709219024
+    "gain":1272218.792498529
   },
   {
     "feature":"temp_squared",
-    "gain":855580.1876234338
+    "gain":838018.0824398622
   },
   {
     "feature":"demand_lag_24h",
-    "gain":673554.162492685
+    "gain":693351.3685959727
   },
   {
     "feature":"hour_sin",
-    "gain":669739.0991448537
+    "gain":682342.7140245736
   },
   {
     "feature":"temperature_2m",
-    "gain":462607.9511917457
-  },
-  {
-    "feature":"hour_cos",
-    "gain":388369.0550141856
+    "gain":466257.4743364528
   },
   {
     "feature":"doy_cos",
-    "gain":381082.4744641557
+    "gain":383515.4466733336
+  },
+  {
+    "feature":"hour_cos",
+    "gain":381379.3690172583
   },
   {
     "feature":"apparent_temperature",
-    "gain":320352.0527148619
+    "gain":363895.965948768
   },
   {
     "feature":"doy_sin",
-    "gain":264181.4364570677
+    "gain":257764.9485275671
   },
   {
     "feature":"demand_lag_25h",
-    "gain":221884.539617911
+    "gain":229876.8763134032
   },
   {
     "feature":"cooling_x_business",
-    "gain":188385.3969888389
+    "gain":186818.6451113448
   },
   {
     "feature":"heating_x_business",
-    "gain":135192.5194930732
+    "gain":131032.9058673158
   },
   {
     "feature":"heating_degrees",
-    "gain":129828.9018291384
+    "gain":125892.8312980905
   },
   {
     "feature":"demand_roll_mean_168h",
-    "gain":118367.0889533907
+    "gain":123059.1152817383
   },
   {
     "feature":"shortwave_radiation",
-    "gain":113354.2180987448
+    "gain":109520.5198507383
   },
   {
     "feature":"dow_sin",
-    "gain":99996.7955398783
-  },
-  {
-    "feature":"temp_lag_24h",
-    "gain":99241.7817583233
+    "gain":98781.3215447366
   },
   {
     "feature":"dew_point_2m",
-    "gain":94202.7211347744
+    "gain":93035.4670641497
   },
   {
     "feature":"is_business_day",
-    "gain":81365.7234617844
+    "gain":89303.4495395273
+  },
+  {
+    "feature":"temp_lag_24h",
+    "gain":82365.510713093
   },
   {
     "feature":"demand_roll_mean_24h",
-    "gain":63185.2471579909
+    "gain":60762.8232748508
   },
   {
     "feature":"relative_humidity_2m",
-    "gain":54243.3810087293
+    "gain":54280.2733074874
   },
   {
     "feature":"demand_roll_std_168h",
-    "gain":51164.7320549116
-  },
-  {
-    "feature":"cooling_degrees",
-    "gain":41768.1523083001
-  },
-  {
-    "feature":"demand_roll_std_24h",
-    "gain":40146.1116952598
+    "gain":53638.0102943182
   },
   {
     "feature":"demand_lag_168h",
-    "gain":39086.4033367932
+    "gain":46725.289683558
   },
   {
     "feature":"demand_lag_26h",
-    "gain":38096.4408823475
+    "gain":39738.2526036575
+  },
+  {
+    "feature":"cooling_degrees",
+    "gain":37924.7526627779
+  },
+  {
+    "feature":"demand_roll_std_24h",
+    "gain":37593.0304828659
   },
   {
     "feature":"demand_lag_48h",
-    "gain":29442.6165928766
+    "gain":28865.8519940153
   },
   {
     "feature":"is_weekend",
-    "gain":28347.2744476721
+    "gain":25258.1660328507
   }
 ]
