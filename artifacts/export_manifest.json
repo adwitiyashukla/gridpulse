@@ -1,17 +1,17 @@
 {
   "database": "gridpulse_app.duckdb",
-  "size_mb": 13.38,
+  "size_mb": 13.64,
   "window_days": 400,
   "tables": {
     "dim_ba": 12,
-    "dim_date": 2857,
-    "fact_demand_hourly": 115172,
-    "fact_forecast_accuracy": 113909,
-    "model_predictions": 25894,
+    "dim_date": 2864,
+    "fact_demand_hourly": 115187,
+    "fact_forecast_accuracy": 113871,
+    "model_predictions": 25893,
     "anomaly_scores": 115204,
     "model_scores": 11,
     "dq_results": 16,
     "dq_scorecard": 6
   },
-  "exported_at_utc": "2026-10-05T15:41:43.260925+00:00"
+  "exported_at_utc": "2026-10-12T16:30:36.875575+00:00"
 }

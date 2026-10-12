@@ -1,9 +1,9 @@
 {
   "best_model": "gbm_hybrid",
-  "best_mape_pct": 2.9908,
-  "eia_benchmark_mape_pct": 3.3739,
-  "skill_vs_eia_pct": 11.35,
-  "test_window_start": "2026-07-07",
-  "test_observations": 25894,
-  "generated_at_utc": "2026-10-05T15:40:38.920868+00:00"
+  "best_mape_pct": 2.9374,
+  "eia_benchmark_mape_pct": 3.3554,
+  "skill_vs_eia_pct": 12.46,
+  "test_window_start": "2026-07-14",
+  "test_observations": 25893,
+  "generated_at_utc": "2026-10-12T16:29:59.407233+00:00"
 }
