@@ -146,18 +146,18 @@ both because showing only the better one would be misleading.
 ## What the numbers say
 
 <!-- RESULTS:START -->
-LightGBM hybrid (+ EIA forecast as input) gets 2.912% MAPE where the EIA's own published forecast gets 3.331%, which is 12.6% better, measured on 25,865 test hours from 2026-07-28 onwards across 12 balancing authorities.
+LightGBM hybrid (+ EIA forecast as input) gets 2.869% MAPE where the EIA's own published forecast gets 3.324%, which is 13.7% better, measured on 25,857 test hours from 2026-08-04 onwards across 12 balancing authorities.
 
 | Model | MAPE % | MAE (MW) | RMSE (MW) | R2 | Peak-hour MAPE % | Hours scored | Skill vs EIA |
 |---|---|---|---|---|---|---|---|
-| **LightGBM hybrid** (+ EIA forecast as input) | 2.912 | 1,209 | 2,170 | 0.9948 | 2.434 | 25,865 | **+12.6%** |
-| _EIA official forecast_ | 3.331 | 1,221 | 2,177 | 0.9948 | 2.503 | 25,170 | - (benchmark) |
-| **LightGBM** (global, quantile) | 3.608 | 1,466 | 2,448 | 0.9934 | 3.792 | 25,865 | -8.3% |
-| **Ensemble** (GBM + LSTM) | 4.132 | 1,434 | 2,232 | 0.9945 | 2.687 | 25,865 | -24.1% |
-| Seasonal naive (24h) | 4.984 | 1,636 | 2,725 | 0.9918 | 4.310 | 25,865 | -49.6% |
-| **LSTM** encoder | 5.174 | 1,568 | 2,499 | 0.9931 | 2.177 | 25,842 | -55.4% |
-| **Transformer** encoder | 6.374 | 2,617 | 4,081 | 0.9816 | 6.332 | 25,842 | -91.4% |
-| Weekly naive (168h) | 9.484 | 3,137 | 4,938 | 0.9731 | 9.422 | 25,865 | -184.7% |
+| **LightGBM hybrid** (+ EIA forecast as input) | 2.869 | 1,158 | 2,117 | 0.9949 | 2.247 | 25,857 | **+13.7%** |
+| _EIA official forecast_ | 3.324 | 1,188 | 2,131 | 0.9949 | 2.445 | 25,097 | - (benchmark) |
+| **LightGBM** (global, quantile) | 3.503 | 1,392 | 2,367 | 0.9936 | 3.999 | 25,857 | -5.4% |
+| **Ensemble** (GBM + LSTM) | 4.429 | 1,544 | 2,379 | 0.9935 | 3.498 | 25,857 | -33.2% |
+| Seasonal naive (24h) | 4.930 | 1,586 | 2,658 | 0.9919 | 4.264 | 25,857 | -48.3% |
+| **LSTM** encoder | 5.828 | 1,822 | 2,786 | 0.9911 | 3.231 | 25,836 | -75.3% |
+| **Transformer** encoder | 6.088 | 2,172 | 3,305 | 0.9875 | 5.512 | 25,836 | -83.1% |
+| Weekly naive (168h) | 9.279 | 3,013 | 4,813 | 0.9735 | 9.046 | 25,857 | -179.1% |
 
 The P10, P50 and P90 rows are left out of this table. They draw the prediction interval rather than competing as point forecasts.
 <!-- RESULTS:END -->
